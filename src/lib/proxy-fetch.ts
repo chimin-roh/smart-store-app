@@ -3,7 +3,7 @@ import { HttpsProxyAgent } from "hpagent";
 
 const PROXY_URL =
   process.env.NOBLE_PROXY_URL ??
-  "https://noble:fp_e1d0e1952942277a@p-5c60fbef.noble-ip.com:3129";
+  "http://noble:fp_e1d0e1952942277a@p-5c60fbef.noble-ip.com:3129";
 
 const isVercel = !!process.env.VERCEL;
 
