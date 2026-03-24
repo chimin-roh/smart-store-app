@@ -4,20 +4,21 @@ const PROXY_URL =
 
 const isVercel = !!process.env.VERCEL;
 
-let dispatcher: any = undefined;
-if (isVercel) {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { ProxyAgent } = require("undici");
-  dispatcher = new ProxyAgent(PROXY_URL);
-}
-
 export async function proxyFetch(
   url: string,
   init?: { method?: string; headers?: Record<string, string>; body?: string },
 ): Promise<{ ok: boolean; status: number; text: () => Promise<string>; json: () => Promise<any> }> {
-  const res = await fetch(url, {
-    ...init,
-    ...(dispatcher ? { dispatcher } : {}),
-  } as any);
+  if (isVercel) {
+    // Noble IP 공식 예제 방식 (node-fetch + hpagent)
+    const nodeFetch = (await import("node-fetch")).default;
+    const { HttpProxyAgent } = await import("hpagent");
+    const agent = new HttpProxyAgent({
+      keepAlive: true,
+      proxy: PROXY_URL,
+    });
+    const res = await nodeFetch(url, { ...init, agent } as any);
+    return res as any;
+  }
+  const res = await fetch(url, init);
   return res;
 }
