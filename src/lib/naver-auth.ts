@@ -20,8 +20,8 @@ export async function getAccessToken(): Promise<string> {
     return cachedToken;
   }
 
-  const clientId = NAVER_CLIENT_ID;
-  const clientSecret = NAVER_CLIENT_SECRET;
+  const clientId = process.env.NAVER_CLIENT_ID ?? NAVER_CLIENT_ID;
+  const clientSecret = process.env.NAVER_CLIENT_SECRET ?? NAVER_CLIENT_SECRET;
   const timestamp = Date.now();
   const signature = generateSignature(clientId, clientSecret, timestamp);
 
