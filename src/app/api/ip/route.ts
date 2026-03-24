@@ -1,8 +1,26 @@
+import { proxyFetch } from "@/lib/proxy-fetch";
+
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  // 외부 서비스를 통해 이 서버의 공인 IP 확인
-  const res = await fetch("https://api.ipify.org?format=json");
-  const data = await res.json();
-  return Response.json({ serverIp: data.ip });
+  try {
+    // 프록시 경유 IP 확인
+    const proxyRes = await proxyFetch("https://api.ipify.org?format=json");
+    const proxyData = await proxyRes.json();
+
+    // 직접 호출 IP 확인
+    const directRes = await fetch("https://api.ipify.org?format=json");
+    const directData = await directRes.json();
+
+    return Response.json({
+      proxyIp: proxyData.ip,
+      directIp: directData.ip,
+      isVercel: !!process.env.VERCEL,
+    });
+  } catch (error) {
+    return Response.json({
+      error: String(error),
+      isVercel: !!process.env.VERCEL,
+    });
+  }
 }
