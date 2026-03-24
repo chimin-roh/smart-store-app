@@ -108,17 +108,14 @@ export default function Home() {
     setLoading(true);
     setError(null);
     try {
-      const [ordersRes, completionsRes] = await Promise.all([
-        fetch("/api/orders"),
-        fetch("/api/completions"),
-      ]);
-      if (!ordersRes.ok) throw new Error("주문 조회 실패");
-      const ordersJson = await ordersRes.json();
-      if (ordersJson.error) throw new Error(ordersJson.error);
-      setData(ordersJson);
-      if (completionsRes.ok) {
-        setCompletions(await completionsRes.json());
-      }
+      const stored = localStorage.getItem("completions");
+      if (stored) setCompletions(JSON.parse(stored));
+
+      const res = await fetch("/api/orders");
+      if (!res.ok) throw new Error("주문 조회 실패");
+      const json = await res.json();
+      if (json.error) throw new Error(json.error);
+      setData(json);
     } catch (e) {
       setError(e instanceof Error ? e.message : "알 수 없는 오류");
     } finally {
@@ -131,42 +128,19 @@ export default function Home() {
   }, [loadOrders]);
 
   const toggleCompletion = useCallback(
-    async (productOrderId: string) => {
-      const newValue = !completions[productOrderId];
-      // 낙관적 업데이트
+    (productOrderId: string) => {
       setCompletions((prev) => {
         const next = { ...prev };
-        if (newValue) {
-          next[productOrderId] = true;
-        } else {
+        if (next[productOrderId]) {
           delete next[productOrderId];
+        } else {
+          next[productOrderId] = true;
         }
+        localStorage.setItem("completions", JSON.stringify(next));
         return next;
       });
-      // 서버 저장
-      try {
-        const res = await fetch("/api/completions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ productOrderId, completed: newValue }),
-        });
-        if (res.ok) {
-          setCompletions(await res.json());
-        }
-      } catch {
-        // 실패 시 되돌리기
-        setCompletions((prev) => {
-          const next = { ...prev };
-          if (!newValue) {
-            next[productOrderId] = true;
-          } else {
-            delete next[productOrderId];
-          }
-          return next;
-        });
-      }
     },
-    [completions],
+    [],
   );
 
   const totalCount = data
