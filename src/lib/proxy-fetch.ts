@@ -11,8 +11,8 @@ export async function proxyFetch(
   if (isVercel) {
     // Noble IP 공식 예제 방식 (node-fetch + hpagent)
     const nodeFetch = (await import("node-fetch")).default;
-    const { HttpProxyAgent } = await import("hpagent");
-    const agent = new HttpProxyAgent({
+    const { HttpsProxyAgent } = await import("hpagent");
+    const agent = new HttpsProxyAgent({
       keepAlive: true,
       proxy: PROXY_URL,
     });
