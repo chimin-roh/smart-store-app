@@ -1,4 +1,5 @@
 import { getAccessToken } from "./naver-auth";
+import { proxyFetch } from "./proxy-fetch";
 import type { Order, GroupedOrder, CategorizedOrders } from "./types";
 
 const API_BASE = "https://api.commerce.naver.com/external";
@@ -20,7 +21,7 @@ async function fetchOrdersForRange(
     page: "1",
   });
 
-  const res = await fetch(
+  const res = await proxyFetch(
     `${API_BASE}/v1/pay-order/seller/product-orders?${params}`,
     {
       headers: { Authorization: `Bearer ${token}` },

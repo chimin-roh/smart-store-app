@@ -1,4 +1,5 @@
 import bcrypt from "bcryptjs";
+import { proxyFetch } from "./proxy-fetch";
 import type { NaverTokenResponse } from "./types";
 
 let _configCache: { id: string; secret: string } | null = null;
@@ -50,7 +51,7 @@ export async function getAccessToken(): Promise<string> {
     type: "SELF",
   });
 
-  const res = await fetch(
+  const res = await proxyFetch(
     "https://api.commerce.naver.com/external/v1/oauth2/token",
     {
       method: "POST",
