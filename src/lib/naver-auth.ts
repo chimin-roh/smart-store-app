@@ -1,6 +1,24 @@
 import bcrypt from "bcryptjs";
-import { NAVER_CLIENT_ID, NAVER_CLIENT_SECRET } from "./config";
 import type { NaverTokenResponse } from "./types";
+
+let _configCache: { id: string; secret: string } | null = null;
+function getConfig() {
+  if (_configCache) return _configCache;
+  const id = process.env.NAVER_CLIENT_ID ?? "";
+  const secret = process.env.NAVER_CLIENT_SECRET ?? "";
+  if (id && secret) {
+    _configCache = { id, secret };
+    return _configCache;
+  }
+  // 로컬 개발: config.ts fallback (Vercel에서는 환경변수 사용)
+  try {
+    const config = require("./config");
+    _configCache = { id: config.NAVER_CLIENT_ID, secret: config.NAVER_CLIENT_SECRET };
+  } catch {
+    _configCache = { id, secret };
+  }
+  return _configCache;
+}
 
 let cachedToken: string | null = null;
 let tokenExpiresAt = 0;
@@ -20,8 +38,7 @@ export async function getAccessToken(): Promise<string> {
     return cachedToken;
   }
 
-  const clientId = process.env.NAVER_CLIENT_ID ?? NAVER_CLIENT_ID;
-  const clientSecret = process.env.NAVER_CLIENT_SECRET ?? NAVER_CLIENT_SECRET;
+  const { id: clientId, secret: clientSecret } = getConfig();
   const timestamp = Date.now();
   const signature = generateSignature(clientId, clientSecret, timestamp);
 
