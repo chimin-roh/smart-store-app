@@ -16,7 +16,7 @@ export interface GroupedOrder {
   buyerName: string;
   orderDate: string;
   category: OrderCategory;
-  items: { productName: string; productOption: string; quantity: number }[];
+  items: { productOrderId: string; productName: string; productOption: string; quantity: number }[];
 }
 
 export interface CategorizedOrders {
@@ -24,6 +24,8 @@ export interface CategorizedOrders {
   스티커: GroupedOrder[];
   복합주문: GroupedOrder[];
 }
+
+export type CompletionState = Record<string, boolean>;
 
 export interface NaverTokenResponse {
   access_token: string;

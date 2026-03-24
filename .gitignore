@@ -36,6 +36,9 @@ yarn-error.log*
 # credentials
 src/lib/config.ts
 
+# completion data
+data/
+
 # vercel
 .vercel
 

@@ -1,7 +1,12 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import type { CategorizedOrders, GroupedOrder, OrderCategory } from "@/lib/types";
+import type {
+  CategorizedOrders,
+  GroupedOrder,
+  OrderCategory,
+  CompletionState,
+} from "@/lib/types";
 
 function formatDate(dateStr: string) {
   if (!dateStr) return "-";
@@ -20,9 +25,25 @@ const SECTIONS: { key: OrderCategory; label: string; color: string }[] = [
   { key: "복합주문", label: "복합주문", color: "bg-purple-500" },
 ];
 
-function OrderCard({ order }: { order: GroupedOrder }) {
+function OrderCard({
+  order,
+  completions,
+  onToggle,
+}: {
+  order: GroupedOrder;
+  completions: CompletionState;
+  onToggle: (productOrderId: string) => void;
+}) {
+  const allDone = order.items.every((item) => completions[item.productOrderId]);
+
   return (
-    <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-4 space-y-2 shadow-sm">
+    <div
+      className={`bg-white dark:bg-zinc-900 rounded-xl border p-4 space-y-2 shadow-sm ${
+        allDone
+          ? "border-green-300 bg-green-50/50 dark:border-green-800 dark:bg-green-950/30"
+          : "border-zinc-200 dark:border-zinc-800"
+      }`}
+    >
       <div className="flex items-center justify-between">
         <span className="font-medium text-zinc-900 dark:text-zinc-100">
           {order.buyerName}
@@ -32,25 +53,46 @@ function OrderCard({ order }: { order: GroupedOrder }) {
         </span>
       </div>
       <div className="space-y-1.5">
-        {order.items.map((item, i) => (
-          <div key={i} className="text-sm text-zinc-700 dark:text-zinc-300">
-            {item.productName.includes("주문제작") ? (
-              <span>
-                주문제작{item.productName.includes("원형") ? " 원형" : ""}
-              </span>
-            ) : (
-              <span>{item.productName}</span>
-            )}
-            <span className="ml-1 font-medium text-zinc-900 dark:text-zinc-100">
-              x{item.quantity}
-            </span>
-            {item.productOption && (
-              <p className="text-xs text-zinc-400 mt-0.5">
-                {item.productOption}
-              </p>
-            )}
-          </div>
-        ))}
+        {order.items.map((item) => {
+          const done = !!completions[item.productOrderId];
+          return (
+            <div
+              key={item.productOrderId}
+              className="flex items-start gap-2 text-sm"
+            >
+              <input
+                type="checkbox"
+                checked={done}
+                onChange={() => onToggle(item.productOrderId)}
+                className="mt-1 h-4 w-4 shrink-0 rounded border-zinc-300 accent-zinc-600"
+              />
+              <div
+                className={
+                  done
+                    ? "line-through opacity-40"
+                    : "text-zinc-700 dark:text-zinc-300"
+                }
+              >
+                {item.productName.includes("주문제작") ? (
+                  <span>
+                    주문제작
+                    {item.productName.includes("원형") ? " 원형" : ""}
+                  </span>
+                ) : (
+                  <span>{item.productName}</span>
+                )}
+                <span className="ml-1 font-medium text-zinc-900 dark:text-zinc-100">
+                  x{item.quantity}
+                </span>
+                {item.productOption && (
+                  <p className="text-xs text-zinc-400 mt-0.5">
+                    {item.productOption}
+                  </p>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -58,6 +100,7 @@ function OrderCard({ order }: { order: GroupedOrder }) {
 
 export default function Home() {
   const [data, setData] = useState<CategorizedOrders | null>(null);
+  const [completions, setCompletions] = useState<CompletionState>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -65,11 +108,17 @@ export default function Home() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/orders");
-      if (!res.ok) throw new Error("주문 조회 실패");
-      const json = await res.json();
-      if (json.error) throw new Error(json.error);
-      setData(json);
+      const [ordersRes, completionsRes] = await Promise.all([
+        fetch("/api/orders"),
+        fetch("/api/completions"),
+      ]);
+      if (!ordersRes.ok) throw new Error("주문 조회 실패");
+      const ordersJson = await ordersRes.json();
+      if (ordersJson.error) throw new Error(ordersJson.error);
+      setData(ordersJson);
+      if (completionsRes.ok) {
+        setCompletions(await completionsRes.json());
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "알 수 없는 오류");
     } finally {
@@ -80,6 +129,45 @@ export default function Home() {
   useEffect(() => {
     loadOrders();
   }, [loadOrders]);
+
+  const toggleCompletion = useCallback(
+    async (productOrderId: string) => {
+      const newValue = !completions[productOrderId];
+      // 낙관적 업데이트
+      setCompletions((prev) => {
+        const next = { ...prev };
+        if (newValue) {
+          next[productOrderId] = true;
+        } else {
+          delete next[productOrderId];
+        }
+        return next;
+      });
+      // 서버 저장
+      try {
+        const res = await fetch("/api/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ productOrderId, completed: newValue }),
+        });
+        if (res.ok) {
+          setCompletions(await res.json());
+        }
+      } catch {
+        // 실패 시 되돌리기
+        setCompletions((prev) => {
+          const next = { ...prev };
+          if (!newValue) {
+            next[productOrderId] = true;
+          } else {
+            delete next[productOrderId];
+          }
+          return next;
+        });
+      }
+    },
+    [completions],
+  );
 
   const totalCount = data
     ? data.핀버튼.length + data.스티커.length + data.복합주문.length
@@ -102,7 +190,9 @@ export default function Home() {
 
       <main className="max-w-lg mx-auto px-4 py-4 space-y-6">
         {loading && !data && (
-          <p className="text-center text-zinc-500 py-12">주문을 불러오는 중...</p>
+          <p className="text-center text-zinc-500 py-12">
+            주문을 불러오는 중...
+          </p>
         )}
 
         {error && (
@@ -134,7 +224,12 @@ export default function Home() {
                 </div>
                 <div className="space-y-3">
                   {orders.map((order) => (
-                    <OrderCard key={order.orderId} order={order} />
+                    <OrderCard
+                      key={order.orderId}
+                      order={order}
+                      completions={completions}
+                      onToggle={toggleCompletion}
+                    />
                   ))}
                 </div>
               </section>

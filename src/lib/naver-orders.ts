@@ -56,16 +56,16 @@ async function fetchRawOrders(): Promise<Order[]> {
   const token = await getAccessToken();
   const now = new Date();
 
-  // 7일을 24시간 단위로 병렬 조회
-  const promises: Promise<Order[]>[] = [];
+  // 7일을 24시간 단위로 순차 조회 (rate limit 방지)
+  const allOrders: Order[] = [];
   for (let i = 0; i < 7; i++) {
     const to = new Date(now.getTime() - i * DAY_MS);
     const from = new Date(to.getTime() - DAY_MS);
-    promises.push(fetchOrdersForRange(token, from, to));
+    const orders = await fetchOrdersForRange(token, from, to);
+    allOrders.push(...orders);
   }
 
-  const results = await Promise.all(promises);
-  return results.flat();
+  return allOrders;
 }
 
 function isToday(dateStr: string): boolean {
@@ -125,6 +125,7 @@ export async function fetchOrders(): Promise<CategorizedOrders> {
       orderDate: first.orderDate,
       category,
       items: items.map((i) => ({
+        productOrderId: i.productOrderId,
         productName: i.productName,
         productOption: i.productOption,
         quantity: i.quantity,
