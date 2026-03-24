@@ -1,5 +1,5 @@
 import nodeFetch from "node-fetch";
-import { HttpProxyAgent } from "hpagent";
+import { HttpsProxyAgent } from "hpagent";
 
 const PROXY_URL =
   process.env.NOBLE_PROXY_URL ??
@@ -8,7 +8,7 @@ const PROXY_URL =
 const isVercel = !!process.env.VERCEL;
 
 const agent = isVercel
-  ? new HttpProxyAgent({ keepAlive: true, proxy: PROXY_URL })
+  ? new HttpsProxyAgent({ keepAlive: true, proxy: PROXY_URL })
   : undefined;
 
 export async function proxyFetch(
