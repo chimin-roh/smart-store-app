@@ -2,13 +2,16 @@ import { getAccessToken } from "./naver-auth";
 import type { Order, GroupedOrder, CategorizedOrders } from "./types";
 
 const API_BASE = "https://api.commerce.naver.com/external";
+const DAY_MS = 24 * 60 * 60 * 1000;
 
-async function fetchRawOrders(): Promise<Order[]> {
-  const token = await getAccessToken();
+// 발송 관련 상태
+const SHIPPED_STATUSES = ["DELIVERING", "DELIVERED", "PURCHASE_DECIDED"];
 
-  const to = new Date();
-  const from = new Date(to.getTime() - 24 * 60 * 60 * 1000);
-
+async function fetchOrdersForRange(
+  token: string,
+  from: Date,
+  to: Date,
+): Promise<Order[]> {
   const params = new URLSearchParams({
     from: from.toISOString(),
     to: to.toISOString(),
@@ -49,6 +52,32 @@ async function fetchRawOrders(): Promise<Order[]> {
   });
 }
 
+async function fetchRawOrders(): Promise<Order[]> {
+  const token = await getAccessToken();
+  const now = new Date();
+
+  // 7일을 24시간 단위로 병렬 조회
+  const promises: Promise<Order[]>[] = [];
+  for (let i = 0; i < 7; i++) {
+    const to = new Date(now.getTime() - i * DAY_MS);
+    const from = new Date(to.getTime() - DAY_MS);
+    promises.push(fetchOrdersForRange(token, from, to));
+  }
+
+  const results = await Promise.all(promises);
+  return results.flat();
+}
+
+function isToday(dateStr: string): boolean {
+  const d = new Date(dateStr);
+  const now = new Date();
+  return (
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate()
+  );
+}
+
 function categorize(items: Order[]): GroupedOrder["category"] {
   const hasPin = items.some((i) => i.productName.includes("핀버튼"));
   const hasSticker = items.some((i) => i.productName.includes("스티커"));
@@ -68,9 +97,17 @@ export async function fetchOrders(): Promise<CategorizedOrders> {
       !o.orderStatus.includes("CANCEL"),
   );
 
+  // 발송된 주문은 오늘 것만, 나머지는 모두 표시
+  const visible = filtered.filter((o) => {
+    if (SHIPPED_STATUSES.includes(o.orderStatus)) {
+      return isToday(o.orderDate);
+    }
+    return true;
+  });
+
   // orderId 기준으로 묶기
   const groups = new Map<string, Order[]>();
-  for (const order of filtered) {
+  for (const order of visible) {
     const key = order.orderId;
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(order);
