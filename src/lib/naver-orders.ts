@@ -106,10 +106,10 @@ export async function fetchOrders(): Promise<CategorizedOrders> {
     return true;
   });
 
-  // orderId 기준으로 묶기
+  // 주문자 이름 기준으로 묶기 (같은 사람의 별도 주문도 합침)
   const groups = new Map<string, Order[]>();
   for (const order of visible) {
-    const key = order.orderId;
+    const key = order.buyerName;
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(order);
   }
@@ -117,13 +117,15 @@ export async function fetchOrders(): Promise<CategorizedOrders> {
   // 분류
   const result: CategorizedOrders = { 핀버튼: [], 스티커: [], 복합주문: [] };
 
-  for (const [orderId, items] of groups) {
-    const first = items[0];
+  for (const [buyerName, items] of groups) {
+    const latest = items.reduce((a, b) =>
+      new Date(a.orderDate) > new Date(b.orderDate) ? a : b,
+    );
     const category = categorize(items);
     const grouped: GroupedOrder = {
-      orderId,
-      buyerName: first.buyerName,
-      orderDate: first.orderDate,
+      orderId: items.map((i) => i.orderId).filter((v, i, a) => a.indexOf(v) === i).join(","),
+      buyerName,
+      orderDate: latest.orderDate,
       category,
       items: items.map((i) => ({
         productOrderId: i.productOrderId,
@@ -135,9 +137,9 @@ export async function fetchOrders(): Promise<CategorizedOrders> {
     result[category].push(grouped);
   }
 
-  // 과거 주문(오래된 것)부터 정렬
+  // 최신 주문이 위로
   const sortByDate = (a: GroupedOrder, b: GroupedOrder) =>
-    new Date(a.orderDate).getTime() - new Date(b.orderDate).getTime();
+    new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime();
   result.핀버튼.sort(sortByDate);
   result.스티커.sort(sortByDate);
   result.복합주문.sort(sortByDate);
