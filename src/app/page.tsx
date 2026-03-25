@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type {
   CategorizedOrders,
   GroupedOrder,
   OrderCategory,
   CompletionState,
+  BuyerImages,
 } from "@/lib/types";
 
 function formatDate(dateStr: string) {
@@ -29,28 +30,56 @@ function OrderCard({
   order,
   completions,
   onToggle,
+  images,
+  expanded,
+  onCardClick,
+  cardRef,
 }: {
   order: GroupedOrder;
   completions: CompletionState;
   onToggle: (productOrderId: string) => void;
+  images: string[];
+  expanded: boolean;
+  onCardClick: () => void;
+  cardRef: (el: HTMLDivElement | null) => void;
 }) {
-  const allDone = order.items.every((item) => completions[item.productOrderId]);
+  const allDone = order.items.every(
+    (item) => completions[item.productOrderId],
+  );
 
   return (
     <div
+      ref={cardRef}
       className={`bg-white dark:bg-zinc-900 rounded-xl border p-4 space-y-2 shadow-sm ${
         allDone
           ? "border-green-300 bg-green-50/50 dark:border-green-800 dark:bg-green-950/30"
           : "border-zinc-200 dark:border-zinc-800"
       }`}
     >
-      <div className="flex items-center justify-between">
+      <div
+        className="flex items-center justify-between cursor-pointer"
+        onClick={onCardClick}
+      >
         <span className="font-medium text-zinc-900 dark:text-zinc-100">
           {order.buyerName}
         </span>
-        <span className="text-xs text-zinc-500">
-          {formatDate(order.orderDate)}
-        </span>
+        <div className="flex items-center gap-2">
+          {images.length > 0 && (
+            <span className="text-xs bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded">
+              {images.length}장
+            </span>
+          )}
+          <span className="text-xs text-zinc-500">
+            {formatDate(order.orderDate)}
+          </span>
+          {images.length > 0 && (
+            <span
+              className={`text-xs text-zinc-400 transition-transform ${expanded ? "rotate-180" : ""}`}
+            >
+              ▼
+            </span>
+          )}
+        </div>
       </div>
       <div className="space-y-1.5">
         {order.items.map((item) => {
@@ -94,6 +123,74 @@ function OrderCard({
           );
         })}
       </div>
+      {expanded && images.length > 0 && (
+        <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-zinc-200 dark:border-zinc-700">
+          {images.map((filename) => (
+            <img
+              key={filename}
+              src={`/api/images/${encodeURIComponent(order.buyerName)}/${encodeURIComponent(filename)}`}
+              alt={filename}
+              className="w-full h-32 object-cover rounded-lg"
+              loading="lazy"
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GalleryView({
+  images,
+  onClose,
+  onNavigate,
+}: {
+  images: BuyerImages;
+  onClose: () => void;
+  onNavigate: (buyerName: string) => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 bg-white dark:bg-zinc-950 overflow-y-auto">
+      <header className="sticky top-0 z-10 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 px-4 py-3 flex items-center justify-between">
+        <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+          갤러리
+        </h1>
+        <button
+          onClick={onClose}
+          className="px-3 py-1.5 text-sm font-medium rounded-lg bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+        >
+          닫기
+        </button>
+      </header>
+      <div className="max-w-lg mx-auto px-4 py-4 space-y-6">
+        {Object.entries(images).map(([buyerName, files]) => (
+          <section key={buyerName}>
+            <button
+              onClick={() => onNavigate(buyerName)}
+              className="text-sm font-semibold text-blue-600 dark:text-blue-400 mb-2"
+            >
+              {buyerName}
+            </button>
+            <div className="grid grid-cols-3 gap-2">
+              {files.map((filename) => (
+                <img
+                  key={filename}
+                  src={`/api/images/${encodeURIComponent(buyerName)}/${encodeURIComponent(filename)}`}
+                  alt={filename}
+                  className="w-full h-24 object-cover rounded-lg cursor-pointer"
+                  loading="lazy"
+                  onClick={() => onNavigate(buyerName)}
+                />
+              ))}
+            </div>
+          </section>
+        ))}
+        {Object.keys(images).length === 0 && (
+          <p className="text-center text-zinc-500 py-12">
+            도안 이미지가 없습니다.
+          </p>
+        )}
+      </div>
     </div>
   );
 }
@@ -101,8 +198,14 @@ function OrderCard({
 export default function Home() {
   const [data, setData] = useState<CategorizedOrders | null>(null);
   const [completions, setCompletions] = useState<CompletionState>({});
+  const [images, setImages] = useState<BuyerImages>({});
+  const [expandedOrders, setExpandedOrders] = useState<
+    Record<string, boolean>
+  >({});
+  const [galleryOpen, setGalleryOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const orderRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const loadOrders = useCallback(async () => {
     setLoading(true);
@@ -111,11 +214,18 @@ export default function Home() {
       const stored = localStorage.getItem("completions");
       if (stored) setCompletions(JSON.parse(stored));
 
-      const res = await fetch("/api/orders");
-      if (!res.ok) throw new Error("주문 조회 실패");
-      const json = await res.json();
-      if (json.error) throw new Error(json.error);
-      setData(json);
+      const [ordersRes, imagesRes] = await Promise.all([
+        fetch("/api/orders"),
+        fetch("/api/images"),
+      ]);
+      if (!ordersRes.ok) throw new Error("주문 조회 실패");
+      const ordersJson = await ordersRes.json();
+      if (ordersJson.error) throw new Error(ordersJson.error);
+      setData(ordersJson);
+
+      if (imagesRes.ok) {
+        setImages(await imagesRes.json());
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "알 수 없는 오류");
     } finally {
@@ -127,39 +237,74 @@ export default function Home() {
     loadOrders();
   }, [loadOrders]);
 
-  const toggleCompletion = useCallback(
-    (productOrderId: string) => {
-      setCompletions((prev) => {
-        const next = { ...prev };
-        if (next[productOrderId]) {
-          delete next[productOrderId];
-        } else {
-          next[productOrderId] = true;
-        }
-        localStorage.setItem("completions", JSON.stringify(next));
-        return next;
+  const toggleCompletion = useCallback((productOrderId: string) => {
+    setCompletions((prev) => {
+      const next = { ...prev };
+      if (next[productOrderId]) {
+        delete next[productOrderId];
+      } else {
+        next[productOrderId] = true;
+      }
+      localStorage.setItem("completions", JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
+  const toggleExpand = useCallback((buyerName: string) => {
+    setExpandedOrders((prev) => ({
+      ...prev,
+      [buyerName]: !prev[buyerName],
+    }));
+  }, []);
+
+  const navigateToOrder = useCallback((buyerName: string) => {
+    setGalleryOpen(false);
+    setExpandedOrders((prev) => ({ ...prev, [buyerName]: true }));
+    setTimeout(() => {
+      orderRefs.current[buyerName]?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
       });
-    },
-    [],
-  );
+    }, 100);
+  }, []);
 
   const totalCount = data
     ? data.핀버튼.length + data.스티커.length + data.복합주문.length
     : 0;
 
+  const hasImages = Object.keys(images).length > 0;
+
   return (
     <div className="min-h-full bg-zinc-50 dark:bg-zinc-950">
+      {galleryOpen && (
+        <GalleryView
+          images={images}
+          onClose={() => setGalleryOpen(false)}
+          onNavigate={navigateToOrder}
+        />
+      )}
+
       <header className="sticky top-0 z-10 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 px-4 py-3 flex items-center justify-between">
         <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
           주문 목록
         </h1>
-        <button
-          onClick={loadOrders}
-          disabled={loading}
-          className="px-3 py-1.5 text-sm font-medium rounded-lg bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 disabled:opacity-50"
-        >
-          {loading ? "조회중..." : "새로고침"}
-        </button>
+        <div className="flex items-center gap-2">
+          {hasImages && (
+            <button
+              onClick={() => setGalleryOpen(true)}
+              className="px-3 py-1.5 text-sm font-medium rounded-lg bg-amber-500 text-white"
+            >
+              갤러리
+            </button>
+          )}
+          <button
+            onClick={loadOrders}
+            disabled={loading}
+            className="px-3 py-1.5 text-sm font-medium rounded-lg bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 disabled:opacity-50"
+          >
+            {loading ? "조회중..." : "새로고침"}
+          </button>
+        </div>
       </header>
 
       <main className="max-w-lg mx-auto px-4 py-4 space-y-6">
@@ -203,6 +348,12 @@ export default function Home() {
                       order={order}
                       completions={completions}
                       onToggle={toggleCompletion}
+                      images={images[order.buyerName] ?? []}
+                      expanded={!!expandedOrders[order.buyerName]}
+                      onCardClick={() => toggleExpand(order.buyerName)}
+                      cardRef={(el) => {
+                        orderRefs.current[order.buyerName] = el;
+                      }}
                     />
                   ))}
                 </div>

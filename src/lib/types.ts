@@ -27,6 +27,8 @@ export interface CategorizedOrders {
 
 export type CompletionState = Record<string, boolean>;
 
+export type BuyerImages = Record<string, string[]>;
+
 export interface NaverTokenResponse {
   access_token: string;
   expires_in: number;
