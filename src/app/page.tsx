@@ -33,6 +33,7 @@ function OrderCard({
   images,
   expanded,
   onCardClick,
+  onAddImage,
   cardRef,
 }: {
   order: GroupedOrder;
@@ -41,24 +42,67 @@ function OrderCard({
   images: string[];
   expanded: boolean;
   onCardClick: () => void;
+  onAddImage: (buyerName: string) => void;
   cardRef: (el: HTMLDivElement | null) => void;
 }) {
   const allDone = order.items.every(
     (item) => completions[item.productOrderId],
   );
+  const [showAddPopup, setShowAddPopup] = useState(false);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleTouchStart = () => {
+    longPressTimer.current = setTimeout(() => {
+      setShowAddPopup(true);
+    }, 500);
+  };
+
+  const handleTouchEnd = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
 
   return (
     <div
       ref={cardRef}
-      className={`bg-white dark:bg-zinc-900 rounded-xl border p-4 space-y-2 shadow-sm ${
+      className={`relative bg-white dark:bg-zinc-900 rounded-xl border p-4 space-y-2 shadow-sm ${
         allDone
           ? "border-green-300 bg-green-50/50 dark:border-green-800 dark:bg-green-950/30"
           : "border-zinc-200 dark:border-zinc-800"
       }`}
     >
+      {showAddPopup && (
+        <div className="absolute top-2 right-2 z-20">
+          <div className="bg-zinc-800 text-white text-sm rounded-lg shadow-lg overflow-hidden">
+            <button
+              className="px-4 py-2.5 hover:bg-zinc-700 w-full text-left"
+              onClick={() => {
+                setShowAddPopup(false);
+                onAddImage(order.buyerName);
+              }}
+            >
+              이미지 추가
+            </button>
+            <button
+              className="px-4 py-2.5 hover:bg-zinc-700 w-full text-left border-t border-zinc-700"
+              onClick={() => setShowAddPopup(false)}
+            >
+              취소
+            </button>
+          </div>
+        </div>
+      )}
       <div
         className="flex items-center justify-between cursor-pointer"
         onClick={onCardClick}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchEnd}
+        onMouseDown={handleTouchStart}
+        onMouseUp={handleTouchEnd}
+        onMouseLeave={handleTouchEnd}
       >
         <span className="font-medium text-zinc-900 dark:text-zinc-100">
           {order.buyerName}
@@ -206,6 +250,8 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const orderRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const addImageBuyerRef = useRef<string>("");
 
   const loadOrders = useCallback(async () => {
     setLoading(true);
@@ -257,6 +303,39 @@ export default function Home() {
     }));
   }, []);
 
+  const handleAddImage = useCallback((buyerName: string) => {
+    addImageBuyerRef.current = buyerName;
+    fileInputRef.current?.click();
+  }, []);
+
+  const handleFileSelected = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      const buyer = addImageBuyerRef.current;
+      if (!file || !buyer) return;
+
+      const formData = new FormData();
+      formData.append("buyer", buyer);
+      formData.append("file", file);
+
+      try {
+        const res = await fetch("/api/images", { method: "POST", body: formData });
+        if (res.ok) {
+          // 이미지 목록 새로고침
+          const imagesRes = await fetch("/api/images");
+          if (imagesRes.ok) setImages(await imagesRes.json());
+          // 해당 카드 확장
+          setExpandedOrders((prev) => ({ ...prev, [buyer]: true }));
+        }
+      } catch {
+        // ignore
+      }
+      // file input 초기화
+      e.target.value = "";
+    },
+    [],
+  );
+
   const navigateToOrder = useCallback((buyerName: string) => {
     setGalleryOpen(false);
     setExpandedOrders((prev) => ({ ...prev, [buyerName]: true }));
@@ -276,6 +355,13 @@ export default function Home() {
 
   return (
     <div className="min-h-full bg-zinc-50 dark:bg-zinc-950">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleFileSelected}
+      />
       {galleryOpen && (
         <GalleryView
           images={images}
@@ -351,6 +437,7 @@ export default function Home() {
                       images={images[order.buyerName] ?? []}
                       expanded={!!expandedOrders[order.buyerName]}
                       onCardClick={() => toggleExpand(order.buyerName)}
+                      onAddImage={handleAddImage}
                       cardRef={(el) => {
                         orderRefs.current[order.buyerName] = el;
                       }}

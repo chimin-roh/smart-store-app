@@ -1,4 +1,4 @@
-import { readdir } from "fs/promises";
+import { readdir, mkdir, writeFile } from "fs/promises";
 import { join } from "path";
 
 export const dynamic = "force-dynamic";
@@ -35,5 +35,28 @@ export async function GET() {
     return Response.json(result);
   } catch {
     return Response.json({});
+  }
+}
+
+export async function POST(request: Request) {
+  const baseDir = getImageBaseDir();
+  try {
+    const formData = await request.formData();
+    const buyer = formData.get("buyer") as string;
+    const file = formData.get("file") as File;
+    if (!buyer || !file) {
+      return Response.json({ error: "buyer and file required" }, { status: 400 });
+    }
+
+    const dir = join(baseDir, buyer);
+    await mkdir(dir, { recursive: true });
+
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const filePath = join(dir, file.name);
+    await writeFile(filePath, buffer);
+
+    return Response.json({ ok: true, filename: file.name });
+  } catch (e) {
+    return Response.json({ error: String(e) }, { status: 500 });
   }
 }
