@@ -1,5 +1,5 @@
-import { readdir, mkdir, writeFile } from "fs/promises";
-import { join } from "path";
+import { readdir, mkdir, writeFile, unlink } from "fs/promises";
+import { join, resolve } from "path";
 
 export const dynamic = "force-dynamic";
 
@@ -56,6 +56,24 @@ export async function POST(request: Request) {
     await writeFile(filePath, buffer);
 
     return Response.json({ ok: true, filename: file.name });
+  } catch (e) {
+    return Response.json({ error: String(e) }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: Request) {
+  const baseDir = getImageBaseDir();
+  try {
+    const { buyer, filename } = await request.json();
+    if (!buyer || !filename) {
+      return Response.json({ error: "buyer and filename required" }, { status: 400 });
+    }
+    const filePath = resolve(join(baseDir, buyer, filename));
+    if (!filePath.startsWith(resolve(baseDir))) {
+      return new Response("Forbidden", { status: 403 });
+    }
+    await unlink(filePath);
+    return Response.json({ ok: true });
   } catch (e) {
     return Response.json({ error: String(e) }, { status: 500 });
   }

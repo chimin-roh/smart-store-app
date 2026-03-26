@@ -26,6 +26,76 @@ const SECTIONS: { key: OrderCategory; label: string; color: string }[] = [
   { key: "복합주문", label: "복합주문", color: "bg-purple-500" },
 ];
 
+function ImageGrid({
+  images,
+  buyerName,
+  onDelete,
+}: {
+  images: string[];
+  buyerName: string;
+  onDelete: (buyerName: string, filename: string) => void;
+}) {
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleTouchStart = (filename: string) => {
+    longPressTimer.current = setTimeout(() => {
+      setDeleteTarget(filename);
+    }, 500);
+  };
+
+  const handleTouchEnd = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
+  return (
+    <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-zinc-200 dark:border-zinc-700">
+      {deleteTarget && (
+        <div className="col-span-2 flex items-center justify-between bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2">
+          <span className="text-sm text-red-700 dark:text-red-300">
+            이미지를 삭제할까요?
+          </span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                onDelete(buyerName, deleteTarget);
+                setDeleteTarget(null);
+              }}
+              className="px-3 py-1 text-xs font-medium rounded bg-red-600 text-white"
+            >
+              삭제
+            </button>
+            <button
+              onClick={() => setDeleteTarget(null)}
+              className="px-3 py-1 text-xs font-medium rounded bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300"
+            >
+              취소
+            </button>
+          </div>
+        </div>
+      )}
+      {images.map((filename) => (
+        <img
+          key={filename}
+          src={`/api/images/${encodeURIComponent(buyerName)}/${encodeURIComponent(filename)}`}
+          alt={filename}
+          className={`w-full h-32 object-cover rounded-lg ${deleteTarget === filename ? "ring-2 ring-red-500 opacity-50" : ""}`}
+          loading="lazy"
+          onTouchStart={() => handleTouchStart(filename)}
+          onTouchEnd={handleTouchEnd}
+          onTouchCancel={handleTouchEnd}
+          onMouseDown={() => handleTouchStart(filename)}
+          onMouseUp={handleTouchEnd}
+          onMouseLeave={handleTouchEnd}
+        />
+      ))}
+    </div>
+  );
+}
+
 function OrderCard({
   order,
   completions,
@@ -34,6 +104,7 @@ function OrderCard({
   expanded,
   onCardClick,
   onAddImage,
+  onDeleteImage,
   cardRef,
 }: {
   order: GroupedOrder;
@@ -43,6 +114,7 @@ function OrderCard({
   expanded: boolean;
   onCardClick: () => void;
   onAddImage: (buyerName: string) => void;
+  onDeleteImage: (buyerName: string, filename: string) => void;
   cardRef: (el: HTMLDivElement | null) => void;
 }) {
   const allDone = order.items.every(
@@ -168,17 +240,11 @@ function OrderCard({
         })}
       </div>
       {expanded && images.length > 0 && (
-        <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-zinc-200 dark:border-zinc-700">
-          {images.map((filename) => (
-            <img
-              key={filename}
-              src={`/api/images/${encodeURIComponent(order.buyerName)}/${encodeURIComponent(filename)}`}
-              alt={filename}
-              className="w-full h-32 object-cover rounded-lg"
-              loading="lazy"
-            />
-          ))}
-        </div>
+        <ImageGrid
+          images={images}
+          buyerName={order.buyerName}
+          onDelete={onDeleteImage}
+        />
       )}
     </div>
   );
@@ -336,6 +402,25 @@ export default function Home() {
     [],
   );
 
+  const handleDeleteImage = useCallback(
+    async (buyerName: string, filename: string) => {
+      try {
+        const res = await fetch("/api/images", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ buyer: buyerName, filename }),
+        });
+        if (res.ok) {
+          const imagesRes = await fetch("/api/images");
+          if (imagesRes.ok) setImages(await imagesRes.json());
+        }
+      } catch {
+        // ignore
+      }
+    },
+    [],
+  );
+
   const navigateToOrder = useCallback((buyerName: string) => {
     setGalleryOpen(false);
     setExpandedOrders((prev) => ({ ...prev, [buyerName]: true }));
@@ -438,6 +523,7 @@ export default function Home() {
                       expanded={!!expandedOrders[order.buyerName]}
                       onCardClick={() => toggleExpand(order.buyerName)}
                       onAddImage={handleAddImage}
+                      onDeleteImage={handleDeleteImage}
                       cardRef={(el) => {
                         orderRefs.current[order.buyerName] = el;
                       }}
