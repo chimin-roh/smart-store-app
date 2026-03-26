@@ -57,9 +57,9 @@ async function fetchRawOrders(): Promise<Order[]> {
   const token = await getAccessToken();
   const now = new Date();
 
-  // 7일을 24시간 단위로 순차 조회 (rate limit 방지)
+  // 14일을 24시간 단위로 순차 조회 (rate limit 방지)
   const allOrders: Order[] = [];
-  for (let i = 0; i < 7; i++) {
+  for (let i = 0; i < 14; i++) {
     const to = new Date(now.getTime() - i * DAY_MS);
     const from = new Date(to.getTime() - DAY_MS);
     const orders = await fetchOrdersForRange(token, from, to);
