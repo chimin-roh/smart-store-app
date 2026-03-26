@@ -35,7 +35,6 @@ yarn-error.log*
 
 # credentials
 src/lib/config.ts
-start.sh
 
 # vercel
 .vercel
