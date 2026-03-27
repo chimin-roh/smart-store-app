@@ -57,14 +57,15 @@ async function fetchRawOrders(): Promise<Order[]> {
   const token = await getAccessToken();
   const now = new Date();
 
-  // 10일을 24시간 단위로 순차 조회
-  const allOrders: Order[] = [];
-  for (let i = 0; i < 10; i++) {
+  // 10일을 500ms 간격으로 병렬 발사 (rate limit 초당 2회)
+  const promises = Array.from({ length: 10 }, (_, i) => {
     const to = new Date(now.getTime() - i * DAY_MS);
     const from = new Date(to.getTime() - DAY_MS);
-    const orders = await fetchOrdersForRange(token, from, to);
-    allOrders.push(...orders);
-  }
+    return new Promise<Order[]>((resolve) =>
+      setTimeout(() => resolve(fetchOrdersForRange(token, from, to)), i * 500),
+    );
+  });
+  const allOrders = (await Promise.all(promises)).flat();
 
   return allOrders;
 }
