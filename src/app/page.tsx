@@ -486,8 +486,32 @@ export default function Home() {
         )}
 
         {error && (
-          <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-xl p-4 text-sm text-red-700 dark:text-red-300">
-            {error}
+          <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-xl p-4 text-sm text-red-700 dark:text-red-300 space-y-3">
+            <p>{error}</p>
+            <button
+              onClick={async () => {
+                try {
+                  const res = await fetch("/api/ip");
+                  const data = await res.json();
+                  const ip = data.directIp;
+                  if (ip) {
+                    await navigator.clipboard.writeText(ip);
+                    alert(`IP 복사됨: ${ip}`);
+                    window.open(
+                      "https://apicenter.commerce.naver.com/ko/member/home",
+                      "_blank",
+                    );
+                  } else {
+                    alert("IP를 가져올 수 없습니다.");
+                  }
+                } catch {
+                  alert("IP 조회 실패");
+                }
+              }}
+              className="w-full py-2 text-sm font-medium rounded-lg bg-red-600 text-white"
+            >
+              IP 복사 후 네이버 API센터 열기
+            </button>
           </div>
         )}
 
