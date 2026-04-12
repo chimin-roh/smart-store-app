@@ -1,6 +1,7 @@
 export interface Order {
   productOrderId: string;
   orderId: string;
+  buyerId: string;
   buyerName: string;
   orderDate: string;
   productName: string;
@@ -13,6 +14,7 @@ export type OrderCategory = "핀버튼" | "스티커" | "복합주문";
 
 export interface GroupedOrder {
   orderId: string;
+  buyerId: string;
   buyerName: string;
   orderDate: string;
   category: OrderCategory;

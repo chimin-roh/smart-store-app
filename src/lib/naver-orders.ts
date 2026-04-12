@@ -43,6 +43,7 @@ async function fetchOrdersForRange(
     return {
       productOrderId: item.productOrderId ?? "",
       orderId: order.orderId ?? "",
+      buyerId: order.ordererNo ?? "",
       buyerName: order.ordererName ?? "",
       orderDate: order.orderDate ?? "",
       productName: productOrder.productName ?? "",
@@ -107,10 +108,10 @@ export async function fetchOrders(): Promise<CategorizedOrders> {
     return true;
   });
 
-  // 주문자 이름 기준으로 묶기 (같은 사람의 별도 주문도 합침)
+  // 주문자 ID 기준으로 묶기 (동명이인 구분)
   const groups = new Map<string, Order[]>();
   for (const order of visible) {
-    const key = order.buyerName;
+    const key = order.buyerId || order.buyerName;
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(order);
   }
@@ -118,14 +119,15 @@ export async function fetchOrders(): Promise<CategorizedOrders> {
   // 분류
   const result: CategorizedOrders = { 핀버튼: [], 스티커: [], 복합주문: [] };
 
-  for (const [buyerName, items] of groups) {
+  for (const [, items] of groups) {
     const latest = items.reduce((a, b) =>
       new Date(a.orderDate) > new Date(b.orderDate) ? a : b,
     );
     const category = categorize(items);
     const grouped: GroupedOrder = {
       orderId: items.map((i) => i.orderId).filter((v, i, a) => a.indexOf(v) === i).join(","),
-      buyerName,
+      buyerId: items[0].buyerId,
+      buyerName: items[0].buyerName,
       orderDate: latest.orderDate,
       category,
       items: items.map((i) => ({

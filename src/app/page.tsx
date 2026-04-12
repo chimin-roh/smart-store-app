@@ -178,6 +178,9 @@ function OrderCard({
       >
         <span className="font-medium text-zinc-900 dark:text-zinc-100">
           {order.buyerName}
+          <span className="ml-1 text-xs font-normal text-zinc-400">
+            {order.buyerId}
+          </span>
         </span>
         <div className="flex items-center gap-2">
           {images.length > 0 && (
@@ -362,10 +365,10 @@ export default function Home() {
     });
   }, []);
 
-  const toggleExpand = useCallback((buyerName: string) => {
+  const toggleExpand = useCallback((buyerId: string) => {
     setExpandedOrders((prev) => ({
       ...prev,
-      [buyerName]: !prev[buyerName],
+      [buyerId]: !prev[buyerId],
     }));
   }, []);
 
@@ -390,8 +393,14 @@ export default function Home() {
           // 이미지 목록 새로고침
           const imagesRes = await fetch("/api/images");
           if (imagesRes.ok) setImages(await imagesRes.json());
-          // 해당 카드 확장
-          setExpandedOrders((prev) => ({ ...prev, [buyer]: true }));
+          // 해당 카드 확장 (buyerName → buyerId 변환)
+          if (data) {
+            const allOrders = [...data.핀버튼, ...data.스티커, ...data.복합주문];
+            const match = allOrders.find((o) => o.buyerName === buyer);
+            if (match) {
+              setExpandedOrders((prev) => ({ ...prev, [match.buyerId]: true }));
+            }
+          }
         }
       } catch {
         // ignore
@@ -399,7 +408,7 @@ export default function Home() {
       // file input 초기화
       e.target.value = "";
     },
-    [],
+    [data],
   );
 
   const handleDeleteImage = useCallback(
@@ -423,14 +432,22 @@ export default function Home() {
 
   const navigateToOrder = useCallback((buyerName: string) => {
     setGalleryOpen(false);
-    setExpandedOrders((prev) => ({ ...prev, [buyerName]: true }));
-    setTimeout(() => {
-      orderRefs.current[buyerName]?.scrollIntoView({
-        behavior: "smooth",
-        block: "center",
-      });
-    }, 100);
-  }, []);
+    if (data) {
+      const allOrders = [...data.핀버튼, ...data.스티커, ...data.복합주문];
+      const matching = allOrders.filter((o) => o.buyerName === buyerName);
+      for (const order of matching) {
+        setExpandedOrders((prev) => ({ ...prev, [order.buyerId]: true }));
+      }
+      if (matching.length > 0) {
+        setTimeout(() => {
+          orderRefs.current[matching[0].buyerId]?.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
+        }, 100);
+      }
+    }
+  }, [data]);
 
   const totalCount = data
     ? data.핀버튼.length + data.스티커.length + data.복합주문.length
@@ -539,17 +556,17 @@ export default function Home() {
                 <div className="space-y-3">
                   {orders.map((order) => (
                     <OrderCard
-                      key={order.orderId}
+                      key={order.buyerId || order.orderId}
                       order={order}
                       completions={completions}
                       onToggle={toggleCompletion}
                       images={images[order.buyerName] ?? []}
-                      expanded={!!expandedOrders[order.buyerName]}
-                      onCardClick={() => toggleExpand(order.buyerName)}
+                      expanded={!!expandedOrders[order.buyerId]}
+                      onCardClick={() => toggleExpand(order.buyerId)}
                       onAddImage={handleAddImage}
                       onDeleteImage={handleDeleteImage}
                       cardRef={(el) => {
-                        orderRefs.current[order.buyerName] = el;
+                        orderRefs.current[order.buyerId] = el;
                       }}
                     />
                   ))}
