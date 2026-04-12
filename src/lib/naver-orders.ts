@@ -39,11 +39,10 @@ async function fetchOrdersForRange(
   return contents.map((item: Record<string, any>) => {
     const order = item.content?.order ?? {};
     const productOrder = item.content?.productOrder ?? {};
-
     return {
       productOrderId: item.productOrderId ?? "",
       orderId: order.orderId ?? "",
-      buyerId: order.ordererNo ?? "",
+      buyerId: order.ordererId ?? "",
       buyerName: order.ordererName ?? "",
       orderDate: order.orderDate ?? "",
       productName: productOrder.productName ?? "",
