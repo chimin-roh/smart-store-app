@@ -1,12 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import type {
   CategorizedOrders,
   GroupedOrder,
   OrderCategory,
   CompletionState,
-  BuyerImages,
 } from "@/lib/types";
 
 function formatDate(dateStr: string) {
@@ -20,78 +19,111 @@ function formatDate(dateStr: string) {
   });
 }
 
+function formatDeadline(dateStr: string) {
+  const [, m, d] = dateStr.split("-");
+  return `${Number(m)}/${Number(d)} 마감`;
+}
+
 const SECTIONS: { key: OrderCategory; label: string; color: string }[] = [
   { key: "핀버튼", label: "핀버튼", color: "bg-blue-500" },
   { key: "스티커", label: "스티커", color: "bg-green-500" },
   { key: "복합주문", label: "복합주문", color: "bg-purple-500" },
 ];
 
-function ImageGrid({
-  images,
-  buyerName,
-  onDelete,
+function DatePicker({
+  selected,
+  onSelect,
+  onClear,
+  onClose,
 }: {
-  images: string[];
-  buyerName: string;
-  onDelete: (buyerName: string, filename: string) => void;
+  selected: string | null;
+  onSelect: (date: string) => void;
+  onClear: () => void;
+  onClose: () => void;
 }) {
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
-  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [viewDate, setViewDate] = useState(() => {
+    if (selected) return new Date(selected + "T00:00:00");
+    return new Date();
+  });
 
-  const handleTouchStart = (filename: string) => {
-    longPressTimer.current = setTimeout(() => {
-      setDeleteTarget(filename);
-    }, 500);
-  };
+  const year = viewDate.getFullYear();
+  const month = viewDate.getMonth();
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-  const handleTouchEnd = () => {
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current);
-      longPressTimer.current = null;
-    }
-  };
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+
+  const cells: (number | null)[] = [];
+  for (let i = 0; i < firstDay; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  const toDateStr = (day: number) =>
+    `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 
   return (
-    <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-zinc-200 dark:border-zinc-700">
-      {deleteTarget && (
-        <div className="col-span-2 flex items-center justify-between bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2">
-          <span className="text-sm text-red-700 dark:text-red-300">
-            이미지를 삭제할까요?
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white dark:bg-zinc-800 rounded-xl shadow-xl p-4 w-72"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-3">
+          <button
+            onClick={() => setViewDate(new Date(year, month - 1, 1))}
+            className="p-1 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+          >
+            ◀
+          </button>
+          <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+            {year}년 {month + 1}월
           </span>
-          <div className="flex gap-2">
-            <button
-              onClick={() => {
-                onDelete(buyerName, deleteTarget);
-                setDeleteTarget(null);
-              }}
-              className="px-3 py-1 text-xs font-medium rounded bg-red-600 text-white"
-            >
-              삭제
-            </button>
-            <button
-              onClick={() => setDeleteTarget(null)}
-              className="px-3 py-1 text-xs font-medium rounded bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300"
-            >
-              취소
-            </button>
-          </div>
+          <button
+            onClick={() => setViewDate(new Date(year, month + 1, 1))}
+            className="p-1 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+          >
+            ▶
+          </button>
         </div>
-      )}
-      {images.map((filename) => (
-        <img
-          key={filename}
-          src={`/api/images/${encodeURIComponent(buyerName)}/${encodeURIComponent(filename)}`}
-          alt={filename}
-          className={`w-full h-32 object-cover rounded-lg ${deleteTarget === filename ? "ring-2 ring-red-500 opacity-50" : ""}`}
-          loading="lazy"
-          onTouchStart={() => handleTouchStart(filename)}
-          onTouchEnd={handleTouchEnd}
-          onTouchCancel={handleTouchEnd}
-          onMouseDown={() => handleTouchStart(filename)}
-          onMouseUp={handleTouchEnd}
-          onMouseLeave={handleTouchEnd}
-        />
-      ))}
+        <div className="grid grid-cols-7 gap-1 text-center text-xs">
+          {["일", "월", "화", "수", "목", "금", "토"].map((d) => (
+            <div key={d} className="py-1 text-zinc-400 font-medium">
+              {d}
+            </div>
+          ))}
+          {cells.map((day, i) => {
+            if (day === null) return <div key={`e-${i}`} />;
+            const dateStr = toDateStr(day);
+            const isSelected = dateStr === selected;
+            const isToday = dateStr === todayStr;
+            return (
+              <button
+                key={day}
+                onClick={() => onSelect(dateStr)}
+                className={`py-1.5 rounded-lg text-sm ${
+                  isSelected
+                    ? "bg-red-500 text-white font-bold"
+                    : isToday
+                      ? "bg-zinc-100 dark:bg-zinc-700 font-semibold text-zinc-900 dark:text-zinc-100"
+                      : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                }`}
+              >
+                {day}
+              </button>
+            );
+          })}
+        </div>
+        {selected && (
+          <button
+            onClick={onClear}
+            className="mt-3 w-full py-1.5 text-xs font-medium rounded-lg bg-zinc-100 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-400"
+          >
+            마감일 삭제
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -100,106 +132,79 @@ function OrderCard({
   order,
   completions,
   onToggle,
-  images,
-  expanded,
-  onCardClick,
-  onAddImage,
-  onDeleteImage,
-  cardRef,
+  deadline,
+  onSetDeadline,
 }: {
   order: GroupedOrder;
   completions: CompletionState;
   onToggle: (productOrderId: string) => void;
-  images: string[];
-  expanded: boolean;
-  onCardClick: () => void;
-  onAddImage: (buyerName: string) => void;
-  onDeleteImage: (buyerName: string, filename: string) => void;
-  cardRef: (el: HTMLDivElement | null) => void;
+  deadline?: string;
+  onSetDeadline: (buyerId: string, date: string | null) => void;
 }) {
   const allDone = order.items.every(
     (item) => completions[item.productOrderId],
   );
-  const [showAddPopup, setShowAddPopup] = useState(false);
-  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const handleTouchStart = () => {
-    longPressTimer.current = setTimeout(() => {
-      setShowAddPopup(true);
-    }, 500);
-  };
-
-  const handleTouchEnd = () => {
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current);
-      longPressTimer.current = null;
-    }
-  };
+  const [calendarOpen, setCalendarOpen] = useState(false);
 
   return (
     <div
-      ref={cardRef}
-      className={`relative bg-white dark:bg-zinc-900 rounded-xl border p-4 space-y-2 shadow-sm ${
+      className={`bg-white dark:bg-zinc-900 rounded-xl border p-4 space-y-2 shadow-sm ${
         allDone
           ? "border-green-300 bg-green-50/50 dark:border-green-800 dark:bg-green-950/30"
           : "border-zinc-200 dark:border-zinc-800"
       }`}
     >
-      {showAddPopup && (
-        <div className="absolute top-2 right-2 z-20">
-          <div className="bg-zinc-800 text-white text-sm rounded-lg shadow-lg overflow-hidden">
-            <button
-              className="px-4 py-2.5 hover:bg-zinc-700 w-full text-left"
-              onClick={() => {
-                setShowAddPopup(false);
-                onAddImage(order.buyerName);
-              }}
-            >
-              이미지 추가
-            </button>
-            <button
-              className="px-4 py-2.5 hover:bg-zinc-700 w-full text-left border-t border-zinc-700"
-              onClick={() => setShowAddPopup(false)}
-            >
-              취소
-            </button>
-          </div>
-        </div>
-      )}
-      <div
-        className="flex items-center justify-between cursor-pointer"
-        onClick={onCardClick}
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
-        onTouchCancel={handleTouchEnd}
-        onMouseDown={handleTouchStart}
-        onMouseUp={handleTouchEnd}
-        onMouseLeave={handleTouchEnd}
-      >
+      <div className="flex items-center justify-between">
         <span className="font-medium text-zinc-900 dark:text-zinc-100">
           {order.buyerName}
           <span className="ml-1 text-xs font-normal text-zinc-400">
             {order.buyerId}
           </span>
         </span>
-        <div className="flex items-center gap-2">
-          {images.length > 0 && (
-            <span className="text-xs bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded">
-              {images.length}장
+        <div className="text-right">
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-zinc-500">
+              {formatDate(order.orderDate)}
             </span>
-          )}
-          <span className="text-xs text-zinc-500">
-            {formatDate(order.orderDate)}
-          </span>
-          {images.length > 0 && (
-            <span
-              className={`text-xs text-zinc-400 transition-transform ${expanded ? "rotate-180" : ""}`}
+            <button
+              onClick={() => setCalendarOpen(true)}
+              className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
             >
-              ▼
-            </span>
+              <svg
+                className="w-3.5 h-3.5"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+              >
+                <rect x="1" y="3" width="14" height="12" rx="1.5" />
+                <line x1="1" y1="7" x2="15" y2="7" />
+                <line x1="4" y1="1" x2="4" y2="5" />
+                <line x1="12" y1="1" x2="12" y2="5" />
+              </svg>
+            </button>
+          </div>
+          {deadline && (
+            <p className="text-xs text-red-500 font-medium mt-0.5">
+              {formatDeadline(deadline)}
+            </p>
           )}
         </div>
       </div>
+      {calendarOpen && (
+        <DatePicker
+          selected={deadline ?? null}
+          onSelect={(date) => {
+            onSetDeadline(order.buyerId, date);
+            setCalendarOpen(false);
+          }}
+          onClear={() => {
+            onSetDeadline(order.buyerId, null);
+            setCalendarOpen(false);
+          }}
+          onClose={() => setCalendarOpen(false)}
+        />
+      )}
       <div className="space-y-1.5">
         {order.items.map((item) => {
           const done = !!completions[item.productOrderId];
@@ -242,68 +247,6 @@ function OrderCard({
           );
         })}
       </div>
-      {expanded && images.length > 0 && (
-        <ImageGrid
-          images={images}
-          buyerName={order.buyerName}
-          onDelete={onDeleteImage}
-        />
-      )}
-    </div>
-  );
-}
-
-function GalleryView({
-  images,
-  onClose,
-  onNavigate,
-}: {
-  images: BuyerImages;
-  onClose: () => void;
-  onNavigate: (buyerName: string) => void;
-}) {
-  return (
-    <div className="fixed inset-0 z-50 bg-white dark:bg-zinc-950 overflow-y-auto">
-      <header className="sticky top-0 z-10 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 px-4 py-3 flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-          갤러리
-        </h1>
-        <button
-          onClick={onClose}
-          className="px-3 py-1.5 text-sm font-medium rounded-lg bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-        >
-          닫기
-        </button>
-      </header>
-      <div className="max-w-lg mx-auto px-4 py-4 space-y-6">
-        {Object.entries(images).map(([buyerName, files]) => (
-          <section key={buyerName}>
-            <button
-              onClick={() => onNavigate(buyerName)}
-              className="text-sm font-semibold text-blue-600 dark:text-blue-400 mb-2"
-            >
-              {buyerName}
-            </button>
-            <div className="grid grid-cols-3 gap-2">
-              {files.map((filename) => (
-                <img
-                  key={filename}
-                  src={`/api/images/${encodeURIComponent(buyerName)}/${encodeURIComponent(filename)}`}
-                  alt={filename}
-                  className="w-full h-24 object-cover rounded-lg cursor-pointer"
-                  loading="lazy"
-                  onClick={() => onNavigate(buyerName)}
-                />
-              ))}
-            </div>
-          </section>
-        ))}
-        {Object.keys(images).length === 0 && (
-          <p className="text-center text-zinc-500 py-12">
-            도안 이미지가 없습니다.
-          </p>
-        )}
-      </div>
     </div>
   );
 }
@@ -311,16 +254,9 @@ function GalleryView({
 export default function Home() {
   const [data, setData] = useState<CategorizedOrders | null>(null);
   const [completions, setCompletions] = useState<CompletionState>({});
-  const [images, setImages] = useState<BuyerImages>({});
-  const [expandedOrders, setExpandedOrders] = useState<
-    Record<string, boolean>
-  >({});
-  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [deadlines, setDeadlines] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const orderRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const addImageBuyerRef = useRef<string>("");
 
   const loadOrders = useCallback(async () => {
     setLoading(true);
@@ -329,18 +265,14 @@ export default function Home() {
       const stored = localStorage.getItem("completions");
       if (stored) setCompletions(JSON.parse(stored));
 
-      const [ordersRes, imagesRes] = await Promise.all([
-        fetch("/api/orders"),
-        fetch("/api/images"),
-      ]);
-      if (!ordersRes.ok) throw new Error("주문 조회 실패");
-      const ordersJson = await ordersRes.json();
-      if (ordersJson.error) throw new Error(ordersJson.error);
-      setData(ordersJson);
+      const storedDeadlines = localStorage.getItem("deadlines");
+      if (storedDeadlines) setDeadlines(JSON.parse(storedDeadlines));
 
-      if (imagesRes.ok) {
-        setImages(await imagesRes.json());
-      }
+      const res = await fetch("/api/orders");
+      if (!res.ok) throw new Error("주문 조회 실패");
+      const json = await res.json();
+      if (json.error) throw new Error(json.error);
+      setData(json);
     } catch (e) {
       setError(e instanceof Error ? e.message : "알 수 없는 오류");
     } finally {
@@ -365,134 +297,36 @@ export default function Home() {
     });
   }, []);
 
-  const toggleExpand = useCallback((buyerId: string) => {
-    setExpandedOrders((prev) => ({
-      ...prev,
-      [buyerId]: !prev[buyerId],
-    }));
+  const setDeadline = useCallback((buyerId: string, date: string | null) => {
+    setDeadlines((prev) => {
+      const next = { ...prev };
+      if (date) {
+        next[buyerId] = date;
+      } else {
+        delete next[buyerId];
+      }
+      localStorage.setItem("deadlines", JSON.stringify(next));
+      return next;
+    });
   }, []);
-
-  const handleAddImage = useCallback((buyerName: string) => {
-    addImageBuyerRef.current = buyerName;
-    fileInputRef.current?.click();
-  }, []);
-
-  const handleFileSelected = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      const buyer = addImageBuyerRef.current;
-      if (!file || !buyer) return;
-
-      const formData = new FormData();
-      formData.append("buyer", buyer);
-      formData.append("file", file);
-
-      try {
-        const res = await fetch("/api/images", { method: "POST", body: formData });
-        if (res.ok) {
-          // 이미지 목록 새로고침
-          const imagesRes = await fetch("/api/images");
-          if (imagesRes.ok) setImages(await imagesRes.json());
-          // 해당 카드 확장 (buyerName → buyerId 변환)
-          if (data) {
-            const allOrders = [...data.핀버튼, ...data.스티커, ...data.복합주문];
-            const match = allOrders.find((o) => o.buyerName === buyer);
-            if (match) {
-              setExpandedOrders((prev) => ({ ...prev, [match.buyerId]: true }));
-            }
-          }
-        }
-      } catch {
-        // ignore
-      }
-      // file input 초기화
-      e.target.value = "";
-    },
-    [data],
-  );
-
-  const handleDeleteImage = useCallback(
-    async (buyerName: string, filename: string) => {
-      try {
-        const res = await fetch("/api/images", {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ buyer: buyerName, filename }),
-        });
-        if (res.ok) {
-          const imagesRes = await fetch("/api/images");
-          if (imagesRes.ok) setImages(await imagesRes.json());
-        }
-      } catch {
-        // ignore
-      }
-    },
-    [],
-  );
-
-  const navigateToOrder = useCallback((buyerName: string) => {
-    setGalleryOpen(false);
-    if (data) {
-      const allOrders = [...data.핀버튼, ...data.스티커, ...data.복합주문];
-      const matching = allOrders.filter((o) => o.buyerName === buyerName);
-      for (const order of matching) {
-        setExpandedOrders((prev) => ({ ...prev, [order.buyerId]: true }));
-      }
-      if (matching.length > 0) {
-        setTimeout(() => {
-          orderRefs.current[matching[0].buyerId]?.scrollIntoView({
-            behavior: "smooth",
-            block: "center",
-          });
-        }, 100);
-      }
-    }
-  }, [data]);
 
   const totalCount = data
     ? data.핀버튼.length + data.스티커.length + data.복합주문.length
     : 0;
 
-  const hasImages = Object.keys(images).length > 0;
-
   return (
     <div className="min-h-full bg-zinc-50 dark:bg-zinc-950">
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={handleFileSelected}
-      />
-      {galleryOpen && (
-        <GalleryView
-          images={images}
-          onClose={() => setGalleryOpen(false)}
-          onNavigate={navigateToOrder}
-        />
-      )}
-
       <header className="sticky top-0 z-10 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 px-4 py-3 flex items-center justify-between">
         <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
           주문 목록
         </h1>
-        <div className="flex items-center gap-2">
-          {hasImages && (
-            <button
-              onClick={() => setGalleryOpen(true)}
-              className="px-3 py-1.5 text-sm font-medium rounded-lg bg-amber-500 text-white"
-            >
-              갤러리
-            </button>
-          )}
-          <button
-            onClick={loadOrders}
-            disabled={loading}
-            className="px-3 py-1.5 text-sm font-medium rounded-lg bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 disabled:opacity-50"
-          >
-            {loading ? "조회중..." : "새로고침"}
-          </button>
-        </div>
+        <button
+          onClick={loadOrders}
+          disabled={loading}
+          className="px-3 py-1.5 text-sm font-medium rounded-lg bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 disabled:opacity-50"
+        >
+          {loading ? "조회중..." : "새로고침"}
+        </button>
       </header>
 
       <main className="max-w-lg mx-auto px-4 py-4 space-y-6">
@@ -560,14 +394,8 @@ export default function Home() {
                       order={order}
                       completions={completions}
                       onToggle={toggleCompletion}
-                      images={images[order.buyerName] ?? []}
-                      expanded={!!expandedOrders[order.buyerId]}
-                      onCardClick={() => toggleExpand(order.buyerId)}
-                      onAddImage={handleAddImage}
-                      onDeleteImage={handleDeleteImage}
-                      cardRef={(el) => {
-                        orderRefs.current[order.buyerId] = el;
-                      }}
+                      deadline={deadlines[order.buyerId]}
+                      onSetDeadline={setDeadline}
                     />
                   ))}
                 </div>
