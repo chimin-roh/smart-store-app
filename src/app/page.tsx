@@ -17,8 +17,8 @@ function formatDate(dateStr: string) {
 }
 
 function formatDeadline(dateStr: string) {
-  const [, m, d] = dateStr.split("-");
-  return `${Number(m)}/${Number(d)} 마감`;
+  const date = new Date(dateStr + "T00:00:00");
+  return `${date.getMonth() + 1}/${date.getDate()} ${DAY_NAMES[date.getDay()]} 마감`;
 }
 
 const SECTIONS: { key: OrderCategory; label: string; color: string }[] = [
