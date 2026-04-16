@@ -8,15 +8,12 @@ import type {
   CompletionState,
 } from "@/lib/types";
 
+const DAY_NAMES = ["일", "월", "화", "수", "목", "금", "토"];
+
 function formatDate(dateStr: string) {
   if (!dateStr) return "-";
   const d = new Date(dateStr);
-  return d.toLocaleString("ko-KR", {
-    month: "numeric",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return `${d.getMonth() + 1}/${d.getDate()} ${DAY_NAMES[d.getDay()]}`;
 }
 
 function formatDeadline(dateStr: string) {
