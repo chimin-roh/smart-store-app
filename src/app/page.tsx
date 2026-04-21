@@ -206,7 +206,7 @@ function StageToggle({
   return (
     <button
       onClick={onCycle}
-      className="mt-0.5 flex items-center gap-0.5 shrink-0"
+      className="mt-0.5 flex flex-col gap-0.5 shrink-0"
       aria-label="상태 변경"
     >
       <span
