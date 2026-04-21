@@ -5,7 +5,8 @@ import type {
   CategorizedOrders,
   GroupedOrder,
   OrderCategory,
-  CompletionState,
+  ItemStage,
+  StageState,
   NicknameState,
 } from "@/lib/types";
 
@@ -195,25 +196,52 @@ function NicknameEditor({
   );
 }
 
+function StageToggle({
+  stage,
+  onCycle,
+}: {
+  stage: ItemStage;
+  onCycle: () => void;
+}) {
+  return (
+    <button
+      onClick={onCycle}
+      className="mt-0.5 flex items-center gap-0.5 shrink-0"
+      aria-label="상태 변경"
+    >
+      <span
+        className={`w-4 h-4 rounded-full border-2 border-blue-500 ${
+          stage >= 1 ? "bg-blue-500" : ""
+        }`}
+      />
+      <span
+        className={`w-4 h-4 rounded-full border-2 border-red-500 ${
+          stage >= 2 ? "bg-red-500" : ""
+        }`}
+      />
+    </button>
+  );
+}
+
 function OrderCard({
   order,
-  completions,
-  onToggle,
+  stages,
+  onCycleStage,
   deadline,
   onSetDeadline,
   nickname,
   onSetNickname,
 }: {
   order: GroupedOrder;
-  completions: CompletionState;
-  onToggle: (productOrderId: string) => void;
+  stages: StageState;
+  onCycleStage: (productOrderId: string) => void;
   deadline?: string;
   onSetDeadline: (buyerId: string, date: string | null) => void;
   nickname?: string;
   onSetNickname: (buyerId: string, nickname: string) => void;
 }) {
   const allDone = order.items.every(
-    (item) => completions[item.productOrderId],
+    (item) => (stages[item.productOrderId] ?? 0) === 2,
   );
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [nicknameOpen, setNicknameOpen] = useState(false);
@@ -311,25 +339,23 @@ function OrderCard({
       )}
       <div className="space-y-1.5">
         {order.items.map((item) => {
-          const done = !!completions[item.productOrderId];
+          const stage = (stages[item.productOrderId] ?? 0) as ItemStage;
+          const textClass =
+            stage === 0
+              ? "text-zinc-700 dark:text-zinc-300"
+              : stage === 1
+                ? "line-through decoration-2 decoration-blue-500 text-zinc-500"
+                : "line-through decoration-2 decoration-red-500 text-zinc-400";
           return (
             <div
               key={item.productOrderId}
               className="flex items-start gap-2 text-sm"
             >
-              <input
-                type="checkbox"
-                checked={done}
-                onChange={() => onToggle(item.productOrderId)}
-                className="mt-1 h-4 w-4 shrink-0 rounded border-zinc-300 accent-zinc-600"
+              <StageToggle
+                stage={stage}
+                onCycle={() => onCycleStage(item.productOrderId)}
               />
-              <div
-                className={
-                  done
-                    ? "line-through opacity-40"
-                    : "text-zinc-700 dark:text-zinc-300"
-                }
-              >
+              <div className={textClass}>
                 {item.productName.includes("주문제작") ? (
                   <span>
                     주문제작
@@ -357,7 +383,7 @@ function OrderCard({
 
 export default function Home() {
   const [data, setData] = useState<CategorizedOrders | null>(null);
-  const [completions, setCompletions] = useState<CompletionState>({});
+  const [stages, setStages] = useState<StageState>({});
   const [deadlines, setDeadlines] = useState<Record<string, string>>({});
   const [nicknames, setNicknames] = useState<NicknameState>({});
   const [loading, setLoading] = useState(true);
@@ -367,8 +393,8 @@ export default function Home() {
     setLoading(true);
     setError(null);
     try {
-      const stored = localStorage.getItem("completions");
-      if (stored) setCompletions(JSON.parse(stored));
+      const storedStages = localStorage.getItem("stages");
+      if (storedStages) setStages(JSON.parse(storedStages));
 
       const storedDeadlines = localStorage.getItem("deadlines");
       if (storedDeadlines) setDeadlines(JSON.parse(storedDeadlines));
@@ -392,15 +418,17 @@ export default function Home() {
     loadOrders();
   }, [loadOrders]);
 
-  const toggleCompletion = useCallback((productOrderId: string) => {
-    setCompletions((prev) => {
+  const cycleStage = useCallback((productOrderId: string) => {
+    setStages((prev) => {
       const next = { ...prev };
-      if (next[productOrderId]) {
+      const current = prev[productOrderId] ?? 0;
+      const nextStage = ((current + 1) % 3) as ItemStage;
+      if (nextStage === 0) {
         delete next[productOrderId];
       } else {
-        next[productOrderId] = true;
+        next[productOrderId] = nextStage;
       }
-      localStorage.setItem("completions", JSON.stringify(next));
+      localStorage.setItem("stages", JSON.stringify(next));
       return next;
     });
   }, []);
@@ -513,8 +541,8 @@ export default function Home() {
                     <OrderCard
                       key={order.buyerId || order.orderId}
                       order={order}
-                      completions={completions}
-                      onToggle={toggleCompletion}
+                      stages={stages}
+                      onCycleStage={cycleStage}
                       deadline={deadlines[order.buyerId]}
                       onSetDeadline={setDeadline}
                       nickname={nicknames[order.buyerId]}

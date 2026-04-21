@@ -27,7 +27,9 @@ export interface CategorizedOrders {
   복합주문: GroupedOrder[];
 }
 
-export type CompletionState = Record<string, boolean>;
+export type ItemStage = 0 | 1 | 2;
+
+export type StageState = Record<string, ItemStage>;
 
 export type NicknameState = Record<string, string>;
 
