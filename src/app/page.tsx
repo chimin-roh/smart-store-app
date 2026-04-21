@@ -6,6 +6,7 @@ import type {
   GroupedOrder,
   OrderCategory,
   CompletionState,
+  NicknameState,
 } from "@/lib/types";
 
 const DAY_NAMES = ["일", "월", "화", "수", "목", "금", "토"];
@@ -125,23 +126,97 @@ function DatePicker({
   );
 }
 
+function NicknameEditor({
+  initial,
+  buyerName,
+  onSave,
+  onClose,
+}: {
+  initial: string;
+  buyerName: string;
+  onSave: (nickname: string) => void;
+  onClose: () => void;
+}) {
+  const [value, setValue] = useState(initial);
+  const save = () => onSave(value.trim());
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white dark:bg-zinc-800 rounded-xl shadow-xl p-4 w-72 space-y-3"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            {buyerName}
+          </p>
+          <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+            닉네임 설정
+          </p>
+        </div>
+        <input
+          autoFocus
+          type="text"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") save();
+          }}
+          placeholder="닉네임 입력 (비우면 삭제)"
+          className="w-full px-3 py-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-zinc-400"
+        />
+        <div className="flex gap-2">
+          <button
+            onClick={onClose}
+            className="flex-1 py-1.5 text-xs font-medium rounded-lg bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300"
+          >
+            취소
+          </button>
+          <button
+            onClick={save}
+            className="flex-1 py-1.5 text-xs font-medium rounded-lg bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+          >
+            저장
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function OrderCard({
   order,
   completions,
   onToggle,
   deadline,
   onSetDeadline,
+  nickname,
+  onSetNickname,
 }: {
   order: GroupedOrder;
   completions: CompletionState;
   onToggle: (productOrderId: string) => void;
   deadline?: string;
   onSetDeadline: (buyerId: string, date: string | null) => void;
+  nickname?: string;
+  onSetNickname: (buyerId: string, nickname: string) => void;
 }) {
   const allDone = order.items.every(
     (item) => completions[item.productOrderId],
   );
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [nicknameOpen, setNicknameOpen] = useState(false);
 
   return (
     <div
@@ -152,11 +227,32 @@ function OrderCard({
       }`}
     >
       <div className="flex items-center justify-between">
-        <span className="font-medium text-zinc-900 dark:text-zinc-100">
-          {order.buyerName}
+        <span className="font-medium text-zinc-900 dark:text-zinc-100 flex items-center gap-1">
+          <span>{order.buyerName}</span>
+          {nickname && (
+            <span className="text-xs font-normal text-blue-500">
+              ({nickname})
+            </span>
+          )}
           <span className="ml-1 text-xs font-normal text-zinc-400">
             {order.buyerId}
           </span>
+          <button
+            onClick={() => setNicknameOpen(true)}
+            className="ml-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+            aria-label="닉네임 편집"
+          >
+            <svg
+              className="w-3.5 h-3.5"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+            >
+              <path d="M11.5 1.5l3 3-9 9H2.5v-3z" />
+              <line x1="9.5" y1="3.5" x2="12.5" y2="6.5" />
+            </svg>
+          </button>
         </span>
         <div className="text-right">
           <div className="flex items-center gap-1.5">
@@ -200,6 +296,17 @@ function OrderCard({
             setCalendarOpen(false);
           }}
           onClose={() => setCalendarOpen(false)}
+        />
+      )}
+      {nicknameOpen && (
+        <NicknameEditor
+          initial={nickname ?? ""}
+          buyerName={order.buyerName}
+          onSave={(next) => {
+            onSetNickname(order.buyerId, next);
+            setNicknameOpen(false);
+          }}
+          onClose={() => setNicknameOpen(false)}
         />
       )}
       <div className="space-y-1.5">
@@ -252,6 +359,7 @@ export default function Home() {
   const [data, setData] = useState<CategorizedOrders | null>(null);
   const [completions, setCompletions] = useState<CompletionState>({});
   const [deadlines, setDeadlines] = useState<Record<string, string>>({});
+  const [nicknames, setNicknames] = useState<NicknameState>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -264,6 +372,9 @@ export default function Home() {
 
       const storedDeadlines = localStorage.getItem("deadlines");
       if (storedDeadlines) setDeadlines(JSON.parse(storedDeadlines));
+
+      const storedNicknames = localStorage.getItem("nicknames");
+      if (storedNicknames) setNicknames(JSON.parse(storedNicknames));
 
       const res = await fetch("/api/orders");
       if (!res.ok) throw new Error("주문 조회 실패");
@@ -303,6 +414,19 @@ export default function Home() {
         delete next[buyerId];
       }
       localStorage.setItem("deadlines", JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
+  const setNickname = useCallback((buyerId: string, nickname: string) => {
+    setNicknames((prev) => {
+      const next = { ...prev };
+      if (nickname) {
+        next[buyerId] = nickname;
+      } else {
+        delete next[buyerId];
+      }
+      localStorage.setItem("nicknames", JSON.stringify(next));
       return next;
     });
   }, []);
@@ -393,6 +517,8 @@ export default function Home() {
                       onToggle={toggleCompletion}
                       deadline={deadlines[order.buyerId]}
                       onSetDeadline={setDeadline}
+                      nickname={nicknames[order.buyerId]}
+                      onSetNickname={setNickname}
                     />
                   ))}
                 </div>
