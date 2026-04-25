@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import type {
   CategorizedOrders,
   GroupedOrder,
@@ -9,6 +9,7 @@ import type {
   StageState,
   NicknameState,
 } from "@/lib/types";
+import { tokenize, filterCategorized } from "@/lib/search";
 
 const DAY_NAMES = ["일", "월", "화", "수", "목", "금", "토"];
 
@@ -189,6 +190,68 @@ function NicknameEditor({
             className="flex-1 py-1.5 text-xs font-medium rounded-lg bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
           >
             저장
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SearchModal({
+  initial,
+  onSubmit,
+  onClose,
+}: {
+  initial: string;
+  onSubmit: (query: string) => void;
+  onClose: () => void;
+}) {
+  const [value, setValue] = useState(initial);
+  const submit = () => onSubmit(value.trim());
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-40 flex items-center justify-center bg-black/30"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white dark:bg-zinc-800 rounded-xl shadow-xl p-4 w-72 space-y-3"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+          주문 검색
+        </p>
+        <input
+          autoFocus
+          type="text"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") submit();
+          }}
+          placeholder="이름 / 상품명 / 옵션"
+          className="w-full px-3 py-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-zinc-400"
+        />
+        <div className="flex gap-2">
+          <button
+            onClick={onClose}
+            className="flex-1 py-1.5 text-xs font-medium rounded-lg bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300"
+          >
+            취소
+          </button>
+          <button
+            onClick={submit}
+            className="flex-1 py-1.5 text-xs font-medium rounded-lg bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+          >
+            검색
           </button>
         </div>
       </div>
@@ -386,6 +449,8 @@ export default function Home() {
   const [stages, setStages] = useState<StageState>({});
   const [deadlines, setDeadlines] = useState<Record<string, string>>({});
   const [nicknames, setNicknames] = useState<NicknameState>({});
+  const [query, setQuery] = useState("");
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -459,16 +524,66 @@ export default function Home() {
     });
   }, []);
 
-  const totalCount = data
-    ? data.핀버튼.length + data.스티커.length + data.복합주문.length
-    : 0;
+  const onSearchSubmit = useCallback((next: string) => {
+    setQuery(next);
+    setIsSearchOpen(false);
+  }, []);
+
+  const onSearchClose = useCallback(() => setIsSearchOpen(false), []);
+
+  const clearQuery = useCallback(() => setQuery(""), []);
+
+  const tokens = useMemo(() => tokenize(query), [query]);
+  const { filtered, total } = useMemo(
+    () => filterCategorized(data, tokens),
+    [data, tokens],
+  );
+
+  const showResetIcon = query.trim() !== "" && !isSearchOpen;
+  const isSearchActive = tokens.length > 0;
 
   return (
     <div className="min-h-full bg-zinc-50 dark:bg-zinc-950">
       <header className="sticky top-0 z-10 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 px-4 py-3 flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-          주문 목록
-        </h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+            주문 목록
+          </h1>
+          <button
+            onClick={() => setIsSearchOpen(true)}
+            className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+            aria-label="검색"
+          >
+            <svg
+              className="w-4 h-4"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.75"
+            >
+              <circle cx="7" cy="7" r="5" />
+              <line x1="11" y1="11" x2="14.5" y2="14.5" strokeLinecap="round" />
+            </svg>
+          </button>
+          {showResetIcon && (
+            <button
+              onClick={clearQuery}
+              className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+              aria-label="검색 초기화"
+            >
+              <svg
+                className="w-4 h-4"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.75"
+              >
+                <line x1="3" y1="3" x2="13" y2="13" strokeLinecap="round" />
+                <line x1="13" y1="3" x2="3" y2="13" strokeLinecap="round" />
+              </svg>
+            </button>
+          )}
+        </div>
         <button
           onClick={loadOrders}
           disabled={loading}
@@ -515,15 +630,21 @@ export default function Home() {
           </div>
         )}
 
-        {!loading && !error && totalCount === 0 && (
+        {!loading && !error && total === 0 && isSearchActive && (
+          <p className="text-center text-zinc-500 py-12">
+            검색 결과가 없습니다.
+          </p>
+        )}
+
+        {!loading && !error && total === 0 && !isSearchActive && data && (
           <p className="text-center text-zinc-500 py-12">
             최근 24시간 내 주문이 없습니다.
           </p>
         )}
 
-        {data &&
+        {filtered &&
           SECTIONS.map(({ key, label, color }) => {
-            const orders = data[key];
+            const orders = filtered[key];
             if (orders.length === 0) return null;
             return (
               <section key={key}>
@@ -554,6 +675,14 @@ export default function Home() {
             );
           })}
       </main>
+
+      {isSearchOpen && (
+        <SearchModal
+          initial={query}
+          onSubmit={onSearchSubmit}
+          onClose={onSearchClose}
+        />
+      )}
     </div>
   );
 }
