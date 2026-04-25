@@ -483,8 +483,9 @@ export default function Home() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [days, setDays] = useState<7 | 14>(7);
 
-  const loadOrders = useCallback(async () => {
+  const loadOrders = useCallback(async (daysParam: number) => {
     setLoading(true);
     setError(null);
     try {
@@ -497,7 +498,7 @@ export default function Home() {
       const storedNicknames = localStorage.getItem("nicknames");
       if (storedNicknames) setNicknames(JSON.parse(storedNicknames));
 
-      const res = await fetch("/api/orders");
+      const res = await fetch(`/api/orders?days=${daysParam}`);
       if (!res.ok) throw new Error("주문 조회 실패");
       const json = await res.json();
       if (json.error) throw new Error(json.error);
@@ -509,9 +510,27 @@ export default function Home() {
     }
   }, []);
 
+  // 마운트 시 마지막 선택 기간을 localStorage에서 복원 후 1회 fetch.
+  // 한 번의 effect로 합쳐 초기 fetch가 7일→14일로 두 번 발사되는 걸 회피.
   useEffect(() => {
-    loadOrders();
+    const stored = localStorage.getItem("orderPeriodDays");
+    const initial: 7 | 14 = stored === "14" ? 14 : 7;
+    setDays(initial);
+    void loadOrders(initial);
   }, [loadOrders]);
+
+  const setPeriod = useCallback(
+    (d: 7 | 14) => {
+      setDays(d);
+      localStorage.setItem("orderPeriodDays", String(d));
+      void loadOrders(d);
+    },
+    [loadOrders],
+  );
+
+  const refresh = useCallback(() => {
+    void loadOrders(days);
+  }, [days, loadOrders]);
 
   const cycleStage = useCallback((productOrderId: string) => {
     setStages((prev) => {
@@ -622,13 +641,41 @@ export default function Home() {
             </button>
           )}
         </div>
-        <button
-          onClick={loadOrders}
-          disabled={loading}
-          className="px-3 py-1.5 text-sm font-medium rounded-lg bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 disabled:opacity-50"
-        >
-          {loading ? "조회중..." : "새로고침"}
-        </button>
+        <div className="flex items-center gap-2">
+          <div className="flex rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700 text-xs font-medium">
+            <button
+              type="button"
+              onClick={() => setPeriod(7)}
+              disabled={loading}
+              className={
+                days === 7
+                  ? "px-2.5 py-1.5 bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                  : "px-2.5 py-1.5 bg-white text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 disabled:opacity-50"
+              }
+            >
+              7일
+            </button>
+            <button
+              type="button"
+              onClick={() => setPeriod(14)}
+              disabled={loading}
+              className={
+                days === 14
+                  ? "px-2.5 py-1.5 bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                  : "px-2.5 py-1.5 bg-white text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 disabled:opacity-50"
+              }
+            >
+              14일
+            </button>
+          </div>
+          <button
+            onClick={refresh}
+            disabled={loading}
+            className="px-3 py-1.5 text-sm font-medium rounded-lg bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 disabled:opacity-50"
+          >
+            {loading ? "조회중..." : "새로고침"}
+          </button>
+        </div>
       </header>
 
       <main className="max-w-lg mx-auto px-4 py-4 space-y-6">

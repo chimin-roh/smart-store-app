@@ -53,12 +53,12 @@ async function fetchOrdersForRange(
   });
 }
 
-async function fetchRawOrders(): Promise<Order[]> {
+async function fetchRawOrders(days: number): Promise<Order[]> {
   const token = await getAccessToken();
   const now = new Date();
 
-  // 14일을 500ms 간격으로 병렬 발사 (rate limit 초당 2회)
-  const promises = Array.from({ length: 14 }, (_, i) => {
+  // N일을 500ms 간격으로 병렬 발사 (rate limit 초당 2회)
+  const promises = Array.from({ length: days }, (_, i) => {
     const to = new Date(now.getTime() - i * DAY_MS);
     const from = new Date(to.getTime() - DAY_MS);
     return new Promise<Order[]>((resolve) =>
@@ -89,8 +89,8 @@ function categorize(items: Order[]): GroupedOrder["category"] {
   return "핀버튼"; // fallback
 }
 
-export async function fetchOrders(): Promise<CategorizedOrders> {
-  const raw = await fetchRawOrders();
+export async function fetchOrders(days: number): Promise<CategorizedOrders> {
+  const raw = await fetchRawOrders(days);
 
   // 취소 주문 및 개별재단 제외
   const filtered = raw.filter(
