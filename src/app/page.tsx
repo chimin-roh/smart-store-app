@@ -9,7 +9,11 @@ import type {
   StageState,
   NicknameState,
 } from "@/lib/types";
-import { tokenize, filterCategorized } from "@/lib/search";
+import {
+  tokenize,
+  filterCategorized,
+  visibleProductLabel,
+} from "@/lib/search";
 
 const DAY_NAMES = ["일", "월", "화", "수", "목", "금", "토"];
 
@@ -22,6 +26,32 @@ function formatDate(dateStr: string) {
 function formatDeadline(dateStr: string) {
   const date = new Date(dateStr + "T00:00:00");
   return `${date.getMonth() + 1}/${date.getDate()} ${DAY_NAMES[date.getDay()]} 마감`;
+}
+
+function escapeRegex(s: string) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * 토큰과 일치하는 부분을 <mark>로 감싸 노란 음영 표시.
+ * 토큰은 NFC + lowercase 이미 정규화되어 있다고 가정 (search.ts tokenize 결과).
+ */
+function highlightTokens(text: string, tokens: string[]): React.ReactNode {
+  if (!text || tokens.length === 0) return text;
+  const pattern = new RegExp(`(${tokens.map(escapeRegex).join("|")})`, "gi");
+  const parts = text.split(pattern);
+  return parts.map((part, i) =>
+    i % 2 === 1 ? (
+      <mark
+        key={i}
+        className="bg-yellow-200 dark:bg-yellow-700 dark:text-zinc-100 rounded-sm px-0.5"
+      >
+        {part}
+      </mark>
+    ) : (
+      <span key={i}>{part}</span>
+    ),
+  );
 }
 
 const SECTIONS: { key: OrderCategory; label: string; color: string }[] = [
@@ -294,6 +324,7 @@ function OrderCard({
   onSetDeadline,
   nickname,
   onSetNickname,
+  tokens,
 }: {
   order: GroupedOrder;
   stages: StageState;
@@ -302,6 +333,7 @@ function OrderCard({
   onSetDeadline: (buyerId: string, date: string | null) => void;
   nickname?: string;
   onSetNickname: (buyerId: string, nickname: string) => void;
+  tokens: string[];
 }) {
   const allDone = order.items.every(
     (item) => (stages[item.productOrderId] ?? 0) === 2,
@@ -319,14 +351,14 @@ function OrderCard({
     >
       <div className="flex items-center justify-between">
         <span className="font-medium text-zinc-900 dark:text-zinc-100 flex items-center gap-1">
-          <span>{order.buyerName}</span>
+          <span>{highlightTokens(order.buyerName, tokens)}</span>
           {nickname && (
             <span className="text-xs font-normal text-blue-500">
               ({nickname})
             </span>
           )}
           <span className="ml-1 text-xs font-normal text-zinc-400">
-            {order.buyerId}
+            {highlightTokens(order.buyerId, tokens)}
           </span>
           <button
             onClick={() => setNicknameOpen(true)}
@@ -419,20 +451,18 @@ function OrderCard({
                 onCycle={() => onCycleStage(item.productOrderId)}
               />
               <div className={textClass}>
-                {item.productName.includes("주문제작") ? (
-                  <span>
-                    주문제작
-                    {item.productName.includes("원형") ? " 원형" : ""}
-                  </span>
-                ) : (
-                  <span>{item.productName}</span>
-                )}
+                <span>
+                  {highlightTokens(
+                    visibleProductLabel(item.productName),
+                    tokens,
+                  )}
+                </span>
                 <span className="ml-1 font-medium text-zinc-900 dark:text-zinc-100">
                   x{item.quantity}
                 </span>
                 {item.productOption && (
                   <p className="text-xs text-zinc-400 mt-0.5">
-                    {item.productOption}
+                    {highlightTokens(item.productOption, tokens)}
                   </p>
                 )}
               </div>
@@ -539,6 +569,9 @@ export default function Home() {
     [data, tokens],
   );
 
+  const totalAll = data
+    ? data.핀버튼.length + data.스티커.length + data.복합주문.length
+    : 0;
   const showResetIcon = query.trim() !== "" && !isSearchOpen;
   const isSearchActive = tokens.length > 0;
 
@@ -565,6 +598,11 @@ export default function Home() {
               <line x1="11" y1="11" x2="14.5" y2="14.5" strokeLinecap="round" />
             </svg>
           </button>
+          {isSearchActive && (
+            <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 tabular-nums">
+              {total}/{totalAll}
+            </span>
+          )}
           {showResetIcon && (
             <button
               onClick={clearQuery}
@@ -668,6 +706,7 @@ export default function Home() {
                       onSetDeadline={setDeadline}
                       nickname={nicknames[order.buyerId]}
                       onSetNickname={setNickname}
+                      tokens={tokens}
                     />
                   ))}
                 </div>

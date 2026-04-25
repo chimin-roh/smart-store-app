@@ -1,5 +1,17 @@
 import type { GroupedOrder, CategorizedOrders } from "@/lib/types";
 
+/**
+ * UI에 표시되는 상품명 — search haystack과 OrderCard 렌더링이 동일한 소스를 쓰도록 통일.
+ * "주문제작"을 포함하는 productName은 화면에 "주문제작" 또는 "주문제작 원형"으로만 표시되므로
+ * 숨겨진 텍스트가 검색에 걸리지 않게 잘라낸다.
+ */
+export function visibleProductLabel(productName: string): string {
+  if (productName.includes("주문제작")) {
+    return productName.includes("원형") ? "주문제작 원형" : "주문제작";
+  }
+  return productName;
+}
+
 export function tokenize(query: string): string[] {
   return query
     .trim()
@@ -13,8 +25,11 @@ export function cardMatches(card: GroupedOrder, tokens: string[]): boolean {
   if (tokens.length === 0) return true;
   const haystack = [
     card.buyerName,
-    ...card.items.map((i) => i.productName),
-    ...card.items.map((i) => i.productOption),
+    card.buyerId,
+    ...card.items.flatMap((i) => [
+      visibleProductLabel(i.productName),
+      i.productOption,
+    ]),
   ]
     .join(" ")
     .normalize("NFC")
