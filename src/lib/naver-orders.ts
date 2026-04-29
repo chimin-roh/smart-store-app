@@ -65,7 +65,7 @@ async function fetchOrdersForRange(
       productOption: productOrder.productOption ?? "",
       quantity: productOrder.quantity ?? 0,
       orderStatus: productOrder.productOrderStatus ?? "",
-      settleAmount: Number(productOrder.settleAmount) || 0,
+      settleAmount: Number(productOrder.expectedSettlementAmount) || 0,
       expectedSettleDate: computeExpectedSettleDate(orderDate),
     };
   });
