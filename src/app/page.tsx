@@ -14,6 +14,10 @@ import {
   filterCategorized,
   visibleProductLabel,
 } from "@/lib/search";
+import {
+  computeSettlementBuckets,
+  type SettlementSummary,
+} from "@/lib/settlement";
 
 const DAY_NAMES = ["일", "월", "화", "수", "목", "금", "토"];
 
@@ -289,6 +293,113 @@ function SearchModal({
   );
 }
 
+const OFFSET_LABELS = ["오늘", "내일", "모레", "글피", "그글피"] as const;
+
+function formatBucketDate(dateStr: string): string {
+  const d = new Date(dateStr + "T00:00:00");
+  return `${d.getMonth() + 1}/${d.getDate()} ${DAY_NAMES[d.getDay()]}`;
+}
+
+function formatKRW(amount: number): string {
+  return `${amount.toLocaleString("ko-KR")}원`;
+}
+
+function SettlementBar({
+  total,
+  onTap,
+}: {
+  total: number;
+  onTap: () => void;
+}) {
+  return (
+    <button
+      onClick={onTap}
+      className="fixed bottom-0 left-1/2 -translate-x-1/2 z-30 w-full max-w-lg flex items-center justify-between px-4 py-3 bg-white dark:bg-zinc-900 border-t border-zinc-200 dark:border-zinc-800 shadow-[0_-2px_8px_rgba(0,0,0,0.05)] dark:shadow-[0_-2px_8px_rgba(0,0,0,0.3)]"
+      aria-label="정산 예정 금액 상세 보기"
+    >
+      <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+        정산예정{" "}
+        <span className="font-semibold text-zinc-900 dark:text-zinc-100">
+          {formatKRW(total)}
+        </span>
+      </span>
+      <svg
+        className="w-4 h-4 text-zinc-400"
+        viewBox="0 0 16 16"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.75"
+      >
+        <polyline points="3,10 8,5 13,10" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </button>
+  );
+}
+
+function SettlementModal({
+  summary,
+  onClose,
+}: {
+  summary: SettlementSummary;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white dark:bg-zinc-800 rounded-xl shadow-xl p-4 w-80 space-y-2"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-2">
+          정산 예정 금액
+        </p>
+        <div className="space-y-1.5 text-sm">
+          {summary.buckets.map((b) => (
+            <div
+              key={b.dateStr}
+              className="flex items-center justify-between text-zinc-700 dark:text-zinc-300"
+            >
+              <span>
+                {OFFSET_LABELS[b.offset]}
+                <span className="ml-1 text-xs text-zinc-400">
+                  ({formatBucketDate(b.dateStr)})
+                </span>
+              </span>
+              <span className="tabular-nums">{formatKRW(b.total)}</span>
+            </div>
+          ))}
+          {summary.rest > 0 && (
+            <div className="flex items-center justify-between text-zinc-700 dark:text-zinc-300">
+              <span>그 외</span>
+              <span className="tabular-nums">{formatKRW(summary.rest)}</span>
+            </div>
+          )}
+        </div>
+        <div className="flex items-center justify-between pt-2 mt-2 border-t border-zinc-200 dark:border-zinc-700 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+          <span>총합</span>
+          <span className="tabular-nums">{formatKRW(summary.grandTotal)}</span>
+        </div>
+        <button
+          onClick={onClose}
+          className="mt-3 w-full py-1.5 text-xs font-medium rounded-lg bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300"
+        >
+          닫기
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function StageToggle({
   stage,
   onCycle,
@@ -481,6 +592,7 @@ export default function Home() {
   const [nicknames, setNicknames] = useState<NicknameState>({});
   const [query, setQuery] = useState("");
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [settlementOpen, setSettlementOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [days, setDays] = useState<7 | 14>(7);
@@ -587,6 +699,10 @@ export default function Home() {
     () => filterCategorized(data, tokens),
     [data, tokens],
   );
+  const settlement = useMemo(
+    () => computeSettlementBuckets(filtered, new Date()),
+    [filtered],
+  );
 
   const totalAll = data
     ? data.핀버튼.length + data.스티커.length + data.복합주문.length
@@ -678,7 +794,7 @@ export default function Home() {
         </div>
       </header>
 
-      <main className="max-w-lg mx-auto px-4 py-4 space-y-6">
+      <main className="max-w-lg mx-auto px-4 py-4 pb-24 space-y-6">
         {loading && !data && (
           <p className="text-center text-zinc-500 py-12">
             주문을 불러오는 중...
@@ -767,6 +883,20 @@ export default function Home() {
           initial={query}
           onSubmit={onSearchSubmit}
           onClose={onSearchClose}
+        />
+      )}
+
+      {!isSearchOpen && settlement.grandTotal > 0 && (
+        <SettlementBar
+          total={settlement.grandTotal}
+          onTap={() => setSettlementOpen(true)}
+        />
+      )}
+
+      {settlementOpen && (
+        <SettlementModal
+          summary={settlement}
+          onClose={() => setSettlementOpen(false)}
         />
       )}
     </div>

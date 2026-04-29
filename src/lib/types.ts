@@ -8,6 +8,8 @@ export interface Order {
   productOption: string;
   quantity: number;
   orderStatus: string;
+  settleAmount: number;
+  expectedSettleDate: string;
 }
 
 export type OrderCategory = "핀버튼" | "스티커" | "복합주문";
@@ -18,7 +20,14 @@ export interface GroupedOrder {
   buyerName: string;
   orderDate: string;
   category: OrderCategory;
-  items: { productOrderId: string; productName: string; productOption: string; quantity: number }[];
+  items: {
+    productOrderId: string;
+    productName: string;
+    productOption: string;
+    quantity: number;
+    settleAmount: number;
+    expectedSettleDate: string;
+  }[];
 }
 
 export interface CategorizedOrders {

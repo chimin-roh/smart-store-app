@@ -4,9 +4,24 @@ import type { Order, GroupedOrder, CategorizedOrders } from "./types";
 
 const API_BASE = "https://api.commerce.naver.com/external";
 const DAY_MS = 24 * 60 * 60 * 1000;
+const SETTLEMENT_OFFSET_DAYS = 14;
 
 // 발송 관련 상태
 const SHIPPED_STATUSES = ["DELIVERING", "DELIVERED", "PURCHASE_DECIDED"];
+
+function toDateStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function computeExpectedSettleDate(orderDate: string): string {
+  if (!orderDate) return "";
+  const t = new Date(orderDate).getTime();
+  if (Number.isNaN(t)) return "";
+  return toDateStr(new Date(t + SETTLEMENT_OFFSET_DAYS * DAY_MS));
+}
 
 async function fetchOrdersForRange(
   token: string,
@@ -39,16 +54,19 @@ async function fetchOrdersForRange(
   return contents.map((item: Record<string, any>) => {
     const order = item.content?.order ?? {};
     const productOrder = item.content?.productOrder ?? {};
+    const orderDate = order.orderDate ?? "";
     return {
       productOrderId: item.productOrderId ?? "",
       orderId: order.orderId ?? "",
       buyerId: order.ordererId ?? "",
       buyerName: order.ordererName ?? "",
-      orderDate: order.orderDate ?? "",
+      orderDate,
       productName: productOrder.productName ?? "",
       productOption: productOrder.productOption ?? "",
       quantity: productOrder.quantity ?? 0,
       orderStatus: productOrder.productOrderStatus ?? "",
+      settleAmount: Number(productOrder.settleAmount) || 0,
+      expectedSettleDate: computeExpectedSettleDate(orderDate),
     };
   });
 }
@@ -134,6 +152,8 @@ export async function fetchOrders(days: number): Promise<CategorizedOrders> {
         productName: i.productName,
         productOption: i.productOption,
         quantity: i.quantity,
+        settleAmount: i.settleAmount,
+        expectedSettleDate: i.expectedSettleDate,
       })),
     };
     result[category].push(grouped);
